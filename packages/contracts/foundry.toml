@@ -1,0 +1,96 @@
+#######################################################################
+#  Foundry configuration – Porfolio Rebalancer                        #
+#  Values in in .envrc / GitHub Secrets                               #
+#######################################################################
+
+############################
+#  Core project structure  #
+############################
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+cache = true                                              # incremental builds
+auto_detect_solc = false                                  # pin compiler ↓
+solc_version = "0.8.24"                                   # upgrade only after audit
+optimizer = true
+optimizer_runs = 1000000                                  # high runs = tighter runtime gas
+via_ir = true                                             # use Yul IR pipeline (smaller bytecode)
+fs_permissions = [{ access = "read", path = "./script" }] # enable ffi read ops
+ffi = true
+dotenv = true
+#####################
+#  Formatting & DX  #
+#####################
+bytecode_hash = "none" # deterministic hashes for diffs
+ast = false            # disable AST json (speeds CI)
+sparse_mode = true     # skip unchanged files
+verbosity = 2          # forge test -vv
+
+##############################
+#  Forge test / fuzz config  #
+##############################
+gas_reports = ["*"] # enable forge gas-report for all tests
+fuzz_runs = 256     # default fuzz iterations (overridden per test)
+# invariant           = true      # uncomment if you start invariant suites
+
+#######################
+#  Remappings (libs)  #
+#######################
+remappings = [
+    "@openzeppelin/=lib/openzeppelin-contracts/",
+    "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+    "solmate/=lib/solmate/src/",
+    "forge-std/=lib/forge-std/src/",
+    "@chainlink/=lib/chainlink/contracts/",
+]
+
+#################################
+#  Sepolia fork testing config  #
+#################################
+[profile.sepolia]
+fork_url = "${SEPOLIA_RPC_URL}"
+# fork_block_number = 10000000
+
+#####################
+#  RPC END-POINTS   #
+#####################
+#
+#  Use `cast send --rpc-url sepolia …` or
+#      `forge script … --rpc-url optimism`
+#
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC_URL}"                   # e.g. Alchemy
+sepolia = "${SEPOLIA_RPC_URL}"
+base = "${BASE_RPC_URL}"
+base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
+polygon = "${POLYGON_RPC_URL}"
+mumbai = "${MUMBAI_RPC_URL}"
+arbitrum = "${ARBITRUM_RPC_URL}"
+arbitrum-sepolia = "${ARBITRUM_SEPOLIA_RPC_URL}"
+optimism = "${OPTIMISM_RPC_URL}"
+optimism-sepolia = "${OPTIMISM_SEPOLIA_RPC_URL}"
+avalanche = "${AVALANCHE_RPC_URL}"
+fuji = "${FUJI_RPC_URL}"
+bsc = "${BSC_RPC_URL}"
+bsc-testnet = "${BSC_TEST_RPC_URL}"
+
+###########################
+#  Explorer verification  #
+###########################
+#
+#  `forge script … --broadcast --verify` picks the
+#  API key based on the chain-id of --rpc-url.
+#
+[etherscan]
+1 = { key = "${ETHERSCAN_API_KEY}" } # Ethereum single api key V2
+
+#########################
+#  Forge script params  #
+#########################
+# These make `forge script` invocations shorter; you can still
+# override with CLI flags on CI or locally.
+# eth_rpc_url        = "${SEPOLIA_RPC_URL}"
+# block_gas_limit    = 30000000
+# private_key      = "${PRIVATE_KEY}"           # never commit!  set in CI env
