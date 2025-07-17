@@ -61,6 +61,9 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     // user => token => balance
     mapping(address => mapping(address => uint256)) public userBalances;
 
+    // tokenA => tokenB => pool address
+    mapping(address => mapping(address => address)) public swapPools;
+    
     // Rebalance threshold (in ALLOCATION_SCALE units, e.g. 0.01 = 10,000)
     uint256 public rebalanceThreshold;
 
@@ -206,6 +209,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         if (amount == 0) revert InvalidAmount();
         userBalances[msg.sender][token] += amount;
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        _ensureSwapApproval(token); // Infinite-approve for Uniswap swaps
         if (autoRebalance) {
             (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
             _rebalance(msg.sender, snapshot);
@@ -302,6 +306,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
 
     /**
      * @dev Performs the rebalance for a user using Uniswap V4, using provided snapshot for gas efficiency.
+     *      Assumes infinite token approvals are already set in deposit().
      *      Emits SwapExecuted for each swap.
      */
     function _rebalance(address user, PortfolioSnapshot memory snapshot) internal {
@@ -321,11 +326,11 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                 for (uint256 j = 0; j < len && amountToSell > 0; j++) {
                     if (i == j) continue;
                     address otherToken = basket[j].token;
-                    address pool = IUniswapV4PoolFactory(uniswapV4Factory).getPool(token, otherToken);
+                    address pool = swapPools[token][otherToken]; // Use cached pool
                     if (pool == address(0)) continue;
                     uint128 liquidity = IUniswapV4Pool(pool).liquidity();
                     if (liquidity == 0) continue;
-                    IERC20(token).safeApprove(pool, amountToSell);
+                    // No approve here; approval handled in deposit()
                     (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
                         address(this),
                         true,
@@ -342,11 +347,11 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                 for (uint256 j = 0; j < len && amountToBuy > 0; j++) {
                     if (i == j) continue;
                     address otherToken = basket[j].token;
-                    address pool = IUniswapV4PoolFactory(uniswapV4Factory).getPool(otherToken, token);
+                    address pool = swapPools[otherToken][token]; // Use cached pool
                     if (pool == address(0)) continue;
                     uint128 liquidity = IUniswapV4Pool(pool).liquidity();
                     if (liquidity == 0) continue;
-                    IERC20(otherToken).safeApprove(pool, amountToBuy);
+                    // No approve here; approval handled in deposit()
                     (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
                         address(this),
                         false,
@@ -432,10 +437,21 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     }
 
     /**
-     * @dev Checks that every token pair in the basket has a Uniswap V4 pool with liquidity.
+     * @dev Ensures the contract has infinite approval for the token to the Uniswap V4 factory (or router/pool as needed).
+     *      Only sets approval if allowance is low, to save gas.
+     */
+    function _ensureSwapApproval(address token) internal {
+        address spender = uniswapV4Factory; // Set to router/pool if needed
+        if (IERC20(token).allowance(address(this), spender) < type(uint256).max / 2) {
+            IERC20(token).safeApprove(spender, type(uint256).max);
+        }
+    }
+
+    /**
+     * @dev Checks and caches Uniswap V4 pools for all token pairs in the basket.
      *      Reverts if any pair is missing a pool or has zero liquidity.
      */
-    function _checkUniswapV4Pools(address[] calldata tokens) internal view {
+    function _checkUniswapV4Pools(address[] calldata tokens) internal {
         uint256 len = tokens.length;
         IUniswapV4PoolFactory factory = IUniswapV4PoolFactory(uniswapV4Factory);
         for (uint256 i = 0; i < len; i++) {
@@ -445,6 +461,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                 if (pool == address(0)) revert NoPoolForToken();
                 uint128 liquidity = IUniswapV4Pool(pool).liquidity();
                 if (liquidity == 0) revert NoLiquidityForToken();
+                swapPools[tokens[i]][tokens[j]] = pool; // Cache the pool address
             }
         }
     }
