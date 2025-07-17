@@ -21,7 +21,13 @@ struct PortfolioSnapshot {
     uint256 totalUSD;
 }
 
+ struct TokenDelta {
+    uint256 index;
+    int256 usd;
+}
+
 event SwapExecuted(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
+event SwapPlanned(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 usdAmount);
 
 error NoPoolForToken();
 error NoLiquidityForToken();
@@ -305,90 +311,100 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     }
 
     /**
-     * @dev Performs the rebalance for a user using Uniswap V4, using provided snapshot for gas efficiency.
-     *      Assumes infinite token approvals are already set in deposit().
-     *      Emits SwapExecuted for each swap.
+     * @dev Computes the USD delta for each token: currentUsd - targetUsd.
+     */
+    function _computeDeltaUsd(uint256[] memory balances, uint256[] memory prices, uint256 totalUSD) internal view returns (int256[] memory) {
+        uint256 len = basket.length;
+        int256[] memory deltas = new int256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            uint256 currentUsd = balances[i].mulWadDown(prices[i]);
+            uint256 targetUsd = totalUSD.mulWadDown(basket[i].targetAllocation);
+            deltas[i] = int256(currentUsd) - int256(targetUsd);
+        }
+        return deltas;
+    }
+
+   
+
+    /**
+     * @dev Performs the rebalance for a user using Greedy Pairwise Matching. Assumes infinite approvals are set in deposit().
+     *      Emits SwapPlanned before each swap and SwapExecuted after.
      */
     function _rebalance(address user, PortfolioSnapshot memory snapshot) internal {
         uint256 len = basket.length;
         uint256[] memory balances = snapshot.balances;
         uint256[] memory prices = snapshot.prices;
         uint256 totalUSD = snapshot.totalUSD;
+        int256[] memory deltas = _computeDeltaUsd(balances, prices, totalUSD);
+
+        // Partition into sellers (delta > 0) and buyers (delta < 0)
+        TokenDelta[] memory sellers = new TokenDelta[](len);
+        TokenDelta[] memory buyers = new TokenDelta[](len);
+        uint256 sellerCount = 0;
+        uint256 buyerCount = 0;
         for (uint256 i = 0; i < len; i++) {
-            address token = basket[i].token;
-            uint256 targetUSD = totalUSD.mulWadDown(basket[i].targetAllocation);
-            uint256 targetBalance = targetUSD.divWadDown(prices[i]);
-            (uint256 amountToSell, uint256 amountToBuy) = _computeAmountToSwap(
-                balances[i], targetBalance, prices[i], totalUSD
+            if (deltas[i] > 0) {
+                sellers[sellerCount++] = TokenDelta(i, deltas[i]);
+            } else if (deltas[i] < 0) {
+                buyers[buyerCount++] = TokenDelta(i, -deltas[i]); // store as positive for easier math
+            }
+        }
+        // Sort sellers and buyers by usd descending (simple selection sort, fine for small N)
+        _sortDescending(sellers, sellerCount);
+        _sortDescending(buyers, buyerCount);
+
+        uint256 s = 0;
+        uint256 b = 0;
+        while (s < sellerCount && b < buyerCount) {
+            uint256 tradeUsd = FixedPointMathLib.min(uint256(sellers[s].usd), uint256(buyers[b].usd));
+            uint256 sellIdx = sellers[s].index;
+            uint256 buyIdx = buyers[b].index;
+            address tokenIn = basket[sellIdx].token;
+            address tokenOut = basket[buyIdx].token;
+            address pool = swapPools[tokenIn][tokenOut];
+            if (pool == address(0)) {
+                // skip if no pool (should not happen)
+                if (sellers[s].usd <= buyers[b].usd) s++; else b++;
+                continue;
+            }
+            // Calculate amountToSell in tokenIn decimals
+            uint256 amountToSell = tradeUsd.divWadDown(prices[sellIdx]);
+            // Calculate minAmountOut in tokenOut decimals (1:1 USD, can add slippage logic later)
+            uint256 minAmountOut = tradeUsd.divWadDown(prices[buyIdx]);
+            emit SwapPlanned(user, tokenIn, tokenOut, tradeUsd);
+            (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
+                address(this),
+                true, // tokenIn -> tokenOut
+                int256(amountToSell),
+                0,
+                ""
             );
-            // Sell excess
-            if (amountToSell > 0) {
-                for (uint256 j = 0; j < len && amountToSell > 0; j++) {
-                    if (i == j) continue;
-                    address otherToken = basket[j].token;
-                    address pool = swapPools[token][otherToken]; // Use cached pool
-                    if (pool == address(0)) continue;
-                    uint128 liquidity = IUniswapV4Pool(pool).liquidity();
-                    if (liquidity == 0) continue;
-                    // No approve here; approval handled in deposit()
-                    (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
-                        address(this),
-                        true,
-                        int256(amountToSell),
-                        0,
-                        ""
-                    );
-                    emit SwapExecuted(user, token, otherToken, amountToSell, uint256(amount1));
-                    amountToSell = 0;
-                }
-            }
-            // Buy deficit
-            if (amountToBuy > 0) {
-                for (uint256 j = 0; j < len && amountToBuy > 0; j++) {
-                    if (i == j) continue;
-                    address otherToken = basket[j].token;
-                    address pool = swapPools[otherToken][token]; // Use cached pool
-                    if (pool == address(0)) continue;
-                    uint128 liquidity = IUniswapV4Pool(pool).liquidity();
-                    if (liquidity == 0) continue;
-                    // No approve here; approval handled in deposit()
-                    (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
-                        address(this),
-                        false,
-                        int256(amountToBuy),
-                        0,
-                        ""
-                    );
-                    emit SwapExecuted(user, otherToken, token, amountToBuy, uint256(amount1));
-                    amountToBuy = 0;
-                }
-            }
+            emit SwapExecuted(user, tokenIn, tokenOut, amountToSell, uint256(amount1));
+            // Update deltas
+            sellers[s].usd -= int256(tradeUsd);
+            buyers[b].usd -= int256(tradeUsd);
+            if (sellers[s].usd == 0) s++;
+            if (buyers[b].usd == 0) b++;
         }
         emit Rebalanced(user);
     }
 
     /**
-     * @notice Computes how much to sell or buy to reach target allocation.
-     * @param currentBalance Current token balance (in token decimals)
-     * @param targetBalance Target token balance (in token decimals)
-     * @param tokenPrice USD price (18 decimals)
-     * @param totalPortfolio Total USD value (18 decimals)
-     * @return amountToSell Amount to sell (if current > target)
-     * @return amountToBuy Amount to buy (if current < target)
+     * @dev Sorts TokenDelta array in-place by usd descending, up to count elements.
      */
-    function _computeAmountToSwap(
-        uint256 currentBalance,
-        uint256 targetBalance,
-        uint256 tokenPrice,
-        uint256 totalPortfolio
-    ) public pure returns (uint256 amountToSell, uint256 amountToBuy) {
-        if (currentBalance == targetBalance) return (0, 0);
-        if (currentBalance > targetBalance) {
-            amountToSell = currentBalance - targetBalance;
-            amountToBuy = 0;
-        } else {
-            amountToSell = 0;
-            amountToBuy = targetBalance - currentBalance;
+    function _sortDescending(TokenDelta[] memory arr, uint256 count) internal pure {
+        for (uint256 i = 0; i < count; i++) {
+            uint256 maxIdx = i;
+            for (uint256 j = i + 1; j < count; j++) {
+                if (arr[j].usd > arr[maxIdx].usd) {
+                    maxIdx = j;
+                }
+            }
+            if (maxIdx != i) {
+                TokenDelta memory tmp = arr[i];
+                arr[i] = arr[maxIdx];
+                arr[maxIdx] = tmp;
+            }
         }
     }
 
