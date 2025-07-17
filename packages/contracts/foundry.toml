@@ -40,10 +40,10 @@ fuzz_runs = 256     # default fuzz iterations (overridden per test)
 #######################
 remappings = [
     "@openzeppelin/=lib/openzeppelin-contracts/",
-    "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+    "@openzeppelin-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
     "solmate/=lib/solmate/src/",
     "forge-std/=lib/forge-std/src/",
-    "@chainlink/=lib/chainlink/contracts/",
+    "@chainlink/=lib/chainlink-brownie-contracts/contracts/src/v0.8/",
 ]
 
 #################################

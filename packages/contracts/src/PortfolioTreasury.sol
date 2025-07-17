@@ -36,8 +36,8 @@ contract PortfolioTreasury is AccessControl {
     constructor(address _link, address _uniswapV4Router, address admin) {
         link = _link;
         uniswapV4Router = _uniswapV4Router;
-        _setupRole(DEFAULT_ADMIN_ROLE, admin);
-        _setupRole(ADMIN_ROLE, admin);
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(ADMIN_ROLE, admin);
     }
 
     /**
@@ -68,7 +68,7 @@ contract PortfolioTreasury is AccessControl {
      */
     function swapToLink(address tokenIn, uint256 amountIn, uint24 fee, uint256 amountOutMin) external onlyRole(SWAPER_ROLE) returns (uint256 amountOut) {
         require(supportedTokens[tokenIn], "Not supported");
-        IERC20(tokenIn).safeApprove(uniswapV4Router, amountIn);
+        IERC20(tokenIn).approve(uniswapV4Router, amountIn);
         amountOut = IUniswapV4Router(uniswapV4Router).exactInputSingle(
             tokenIn,
             link,

@@ -29,8 +29,8 @@ contract PortfolioRebalancerFactory is AccessControl {
         implementation = _implementation;
         treasury = _treasury;
         feeBps = _feeBps;
-        _setupRole(DEFAULT_ADMIN_ROLE, admin);
-        _setupRole(ADMIN_ROLE, admin);
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(ADMIN_ROLE, admin);
     }
 
     /**

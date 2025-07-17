@@ -1,19 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "solmate/src/utils/FixedPointMathLib.sol";
-import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
-import "./IUniswapV4.sol";
-
-// Uniswap V4 factory address (set at initialization)
-address public uniswapV4Factory;
+import "solmate/utils/FixedPointMathLib.sol";
+import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
+import "@chainlink/automation/AutomationCompatible.sol";
+import "./interfaces/IUniswapV4.sol";
 
 struct PortfolioSnapshot {
     uint256[] balances;
@@ -42,9 +39,12 @@ error InvalidPriceFeedUpdate(address feed);
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
  * @dev UUPS upgradeable, Ownable, ReentrancyGuard, Chainlink Keeper-compatible, uses custom errors for gas savings.
  */
-contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, KeeperCompatibleInterface {
+contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, AutomationCompatibleInterface {
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
+
+    // Uniswap V4 factory address (set at initialization)
+    address public uniswapV4Factory;
 
     // Constants
     uint256 public constant MAX_TOKENS = 6;
@@ -118,7 +118,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 _feeBps,
         address _treasury
     ) external initializer {
-        __Ownable_init();
+        __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         uniswapV4Factory = _uniswapV4Factory;
@@ -356,7 +356,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 s = 0;
         uint256 b = 0;
         while (s < sellerCount && b < buyerCount) {
-            uint256 tradeUsd = FixedPointMathLib.min(uint256(sellers[s].usd), uint256(buyers[b].usd));
+            uint256 tradeUsd = uint256(sellers[s].usd) < uint256(buyers[b].usd) ? uint256(sellers[s].usd) : uint256(buyers[b].usd);
             uint256 sellIdx = sellers[s].index;
             uint256 buyIdx = buyers[b].index;
             address tokenIn = basket[sellIdx].token;
@@ -369,10 +369,8 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
             }
             // Calculate amountToSell in tokenIn decimals
             uint256 amountToSell = tradeUsd.divWadDown(prices[sellIdx]);
-            // Calculate minAmountOut in tokenOut decimals (1:1 USD, can add slippage logic later)
-            uint256 minAmountOut = tradeUsd.divWadDown(prices[buyIdx]);
             emit SwapPlanned(user, tokenIn, tokenOut, tradeUsd);
-            (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
+            (, int256 amount1) = IUniswapV4Pool(pool).swap(
                 address(this),
                 true, // tokenIn -> tokenOut
                 int256(amountToSell),
@@ -459,7 +457,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     function _ensureSwapApproval(address token) internal {
         address spender = uniswapV4Factory; // Set to router/pool if needed
         if (IERC20(token).allowance(address(this), spender) < type(uint256).max / 2) {
-            IERC20(token).safeApprove(spender, type(uint256).max);
+            IERC20(token).approve(spender, type(uint256).max);
         }
     }
 
