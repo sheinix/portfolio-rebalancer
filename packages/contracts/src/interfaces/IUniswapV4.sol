@@ -16,4 +16,17 @@ interface IUniswapV4Pool {
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) external returns (int256 amount0, int256 amount1);
+}
+
+/// @notice Minimal Uniswap V4 router interface for exactInputSingle
+interface IUniswapV4Router {
+    function exactInputSingle(
+        address tokenIn,
+        address tokenOut,
+        uint24 fee,
+        address recipient,
+        uint256 amountIn,
+        uint256 amountOutMinimum,
+        uint160 sqrtPriceLimitX96
+    ) external payable returns (uint256 amountOut);
 } 

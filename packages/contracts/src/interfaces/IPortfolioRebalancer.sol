@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+interface IPortfolioRebalancer {
+    function initialize(
+        address[] calldata tokens,
+        address[] calldata priceFeeds,
+        uint256[] calldata allocations,
+        uint256 rebalanceThreshold,
+        address uniswapV4Factory,
+        uint256 feeBps,
+        address treasury
+    ) external;
+} 

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solmate/src/utils/FixedPointMathLib.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/contracts/src/v0.8/KeeperCompatible.sol";
@@ -25,6 +26,11 @@ event SwapExecuted(address indexed user, address indexed tokenIn, address indexe
 error NoPoolForToken();
 error NoLiquidityForToken();
 
+// Custom errors for price feed validation
+error InvalidPriceFeedCall(address feed);
+error InvalidPriceFeedAnswer(address feed);
+error InvalidPriceFeedUpdate(address feed);
+
 /**
  * @title PortfolioRebalancer
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
@@ -32,6 +38,7 @@ error NoLiquidityForToken();
  */
 contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, KeeperCompatibleInterface {
     using FixedPointMathLib for uint256;
+    using SafeERC20 for IERC20;
 
     // Constants
     uint256 public constant MAX_TOKENS = 6;
@@ -57,12 +64,18 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     // Rebalance threshold (in ALLOCATION_SCALE units, e.g. 0.01 = 10,000)
     uint256 public rebalanceThreshold;
 
+    // Immutable fee parameters
+    uint256 public feeBps; // Immutable after initialization
+    address public treasury; // Immutable after initialization
+    bool public automationEnabled;
+
     // Events
     event Deposit(address indexed user, address indexed token, uint256 amount);
     event Withdraw(address indexed user, address indexed token, uint256 amount);
     event BasketUpdated(address[] tokens, address[] priceFeeds, uint256[] allocations);
     event Rebalanced(address indexed user);
     event RebalanceThresholdUpdated(uint256 newThreshold);
+    event AutomationToggled(bool enabled);
 
     // Errors
     error NotWhitelisted();
@@ -78,19 +91,23 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
 
     // Initializer
     /**
-     * @notice Initializes the contract with initial basket, threshold, and Uniswap V4 factory address.
+     * @notice Initializes the contract with all parameters. Fee and treasury are immutable after this call.
      * @param tokens ERC-20 token addresses.
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param _rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
      * @param _uniswapV4Factory Uniswap V4 factory address.
+     * @param _feeBps Fee in basis points (e.g., 10 = 0.1%). Immutable after initialization.
+     * @param _treasury Treasury address for fee collection. Immutable after initialization.
      */
     function initialize(
         address[] calldata tokens,
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 _rebalanceThreshold,
-        address _uniswapV4Factory
+        address _uniswapV4Factory,
+        uint256 _feeBps,
+        address _treasury
     ) external initializer {
         __Ownable_init();
         __UUPSUpgradeable_init();
@@ -98,6 +115,9 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uniswapV4Factory = _uniswapV4Factory;
         _setBasket(tokens, priceFeeds, allocations);
         rebalanceThreshold = _rebalanceThreshold;
+        feeBps = _feeBps;
+        treasury = _treasury;
+        automationEnabled = true;
     }
 
     // Basket Management
@@ -128,6 +148,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         _checkUniswapV4Pools(tokens);
         for (uint256 i = 0; i < len; i++) {
             if (tokens[i] == address(0) || priceFeeds[i] == address(0)) revert ZeroAddress();
+            _validatePriceFeed(priceFeeds[i]);
             basket.push(TokenInfo({token: tokens[i], priceFeed: priceFeeds[i], targetAllocation: allocations[i]}));
             tokenIndex[tokens[i]] = i;
             isWhitelisted[tokens[i]] = true;
@@ -156,19 +177,39 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         emit RebalanceThresholdUpdated(newThreshold);
     }
 
+    /**
+     * @notice Toggle Chainlink automation for this vault. Only callable by the vault owner.
+     * @param enabled True to enable automation, false to disable.
+     */
+    function setAutomationEnabled(bool enabled) external onlyOwner {
+        automationEnabled = enabled;
+        emit AutomationToggled(enabled);
+    }
+
     // Deposit & Withdraw
     /**
      * @notice Deposit a whitelisted token into your vault. Only callable by the vault owner.
      * @param token ERC-20 token address.
      * @param amount Amount to deposit.
+     * @param autoRebalance If true, triggers a rebalance after deposit. If false, only updates balances.
+     *
+     * @dev
+     * Use autoRebalance = false when:
+     *   - Building your initial portfolio (multiple deposits, avoid unnecessary swaps/gas).
+     *   - Batching deposits for gas efficiency.
+     * Use autoRebalance = true when:
+     *   - You want your portfolio to match target allocations after every deposit.
+     *   - You want immediate rebalancing after a single deposit.
      */
-    function deposit(address token, uint256 amount) external nonReentrant onlyOwner {
+    function deposit(address token, uint256 amount, bool autoRebalance) external nonReentrant onlyOwner {
         if (!isWhitelisted[token]) revert NotWhitelisted();
         if (amount == 0) revert InvalidAmount();
         userBalances[msg.sender][token] += amount;
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
-        (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
-        _rebalance(msg.sender, snapshot);
+        IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+        if (autoRebalance) {
+            (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
+            _rebalance(msg.sender, snapshot);
+        }
         emit Deposit(msg.sender, token, amount);
     }
 
@@ -176,16 +217,27 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
      * @notice Withdraw a token from your vault. Only callable by the vault owner.
      * @param token ERC-20 token address.
      * @param amount Amount to withdraw.
+     * @param autoRebalance If true, triggers a rebalance after withdrawal. If false, only updates balances.
+     *
+     * @dev
+     * Use autoRebalance = false when:
+     *   - Withdrawing as part of a batch of actions (avoid unnecessary swaps/gas).
+     *   - Managing your portfolio manually for gas efficiency.
+     * Use autoRebalance = true when:
+     *   - You want your portfolio to match target allocations after every withdrawal.
+     *   - You want immediate rebalancing after a single withdrawal.
      */
-    function withdraw(address token, uint256 amount) external nonReentrant onlyOwner {
+    function withdraw(address token, uint256 amount, bool autoRebalance) external nonReentrant onlyOwner {
         if (!isWhitelisted[token]) revert NotWhitelisted();
         if (amount == 0) revert InvalidAmount();
         uint256 bal = userBalances[msg.sender][token];
         if (bal < amount) revert NotEnoughBalance();
         userBalances[msg.sender][token] = bal - amount;
-        IERC20(token).transfer(msg.sender, amount);
-        (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
-        _rebalance(msg.sender, snapshot);
+        IERC20(token).safeTransfer(msg.sender, amount);
+        if (autoRebalance) {
+            (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
+            _rebalance(msg.sender, snapshot);
+        }
         emit Withdraw(msg.sender, token, amount);
     }
 
@@ -240,8 +292,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
             uint256 value = balances[i].mulWadDown(prices[i]);
             uint256 pct = value == 0 ? 0 : value.divWadDown(totalUSD);
             uint256 target = basket[i].targetAllocation;
-            uint256 deviation = pct > target ? pct - target : target - pct;
-            if (deviation > rebalanceThreshold) {
+            if (_exceedsDeviation(pct, target, rebalanceThreshold)) {
                 needs = true;
                 break;
             }
@@ -274,7 +325,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                     if (pool == address(0)) continue;
                     uint128 liquidity = IUniswapV4Pool(pool).liquidity();
                     if (liquidity == 0) continue;
-                    IERC20(token).approve(pool, amountToSell);
+                    IERC20(token).safeApprove(pool, amountToSell);
                     (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
                         address(this),
                         true,
@@ -295,7 +346,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                     if (pool == address(0)) continue;
                     uint128 liquidity = IUniswapV4Pool(pool).liquidity();
                     if (liquidity == 0) continue;
-                    IERC20(otherToken).approve(pool, amountToBuy);
+                    IERC20(otherToken).safeApprove(pool, amountToBuy);
                     (int256 amount0, int256 amount1) = IUniswapV4Pool(pool).swap(
                         address(this),
                         false,
@@ -366,6 +417,21 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     }
 
     /**
+     * @dev Validates that a price feed is a working Chainlink AggregatorV3Interface.
+     *      Reverts with custom errors if the feed is invalid.
+     */
+    function _validatePriceFeed(address priceFeed) internal view {
+        try AggregatorV3Interface(priceFeed).latestRoundData() returns (
+            uint80 /*roundId*/, int256 answer, uint256 /*startedAt*/, uint256 updatedAt, uint80 /*answeredInRound*/
+        ) {
+            if (answer <= 0) revert InvalidPriceFeedAnswer(priceFeed);
+            if (updatedAt == 0) revert InvalidPriceFeedUpdate(priceFeed);
+        } catch {
+            revert InvalidPriceFeedCall(priceFeed);
+        }
+    }
+
+    /**
      * @dev Checks that every token pair in the basket has a Uniswap V4 pool with liquidity.
      *      Reverts if any pair is missing a pool or has zero liquidity.
      */
@@ -381,6 +447,27 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
                 if (liquidity == 0) revert NoLiquidityForToken();
             }
         }
+    }
+
+    /**
+     * @dev Returns true if the deviation between actual and target allocation exceeds the threshold.
+     */
+    function _exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) internal pure returns (bool) {
+        uint256 deviation = pct > target ? pct - target : target - pct;
+        return deviation > threshold;
+    }
+
+    // Internal fee transfer
+    /**
+     * @dev Deducts the configured fee and sends it to the treasury. Fee and treasury are immutable after initialization.
+     */
+    function _takeFee(address token, uint256 amount) internal returns (uint256 netAmount) {
+        if (feeBps == 0 || treasury == address(0)) return amount;
+        uint256 fee = (amount * feeBps) / 10000;
+        if (fee > 0) {
+            IERC20(token).safeTransfer(treasury, fee);
+        }
+        return amount - fee;
     }
 
     // Upgrade Authorization
