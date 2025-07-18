@@ -26,14 +26,6 @@ struct PortfolioSnapshot {
 event SwapExecuted(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
 event SwapPlanned(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 usdAmount);
 
-error NoPoolForToken();
-error NoLiquidityForToken();
-
-// Custom errors for price feed validation
-error InvalidPriceFeedCall(address feed);
-error InvalidPriceFeedAnswer(address feed);
-error InvalidPriceFeedUpdate(address feed);
-
 /**
  * @title PortfolioRebalancer
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
@@ -94,9 +86,16 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
     error AllocationSumMismatch();
     error ExceedsMaxTokens();
     error ZeroAddress();
+    error ZeroTreasury();
+    error ZeroFactory();
     error NotEnoughBalance();
     error PriceFeedError();
     error NoRebalanceNeeded();
+    error NoPoolForToken();
+    error NoLiquidityForToken();
+    error InvalidPriceFeedCall(address feed);
+    error InvalidPriceFeedAnswer(address feed);
+    error InvalidPriceFeedUpdate(address feed);
 
     // Initializer
     /**
@@ -118,6 +117,9 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         uint256 _feeBps,
         address _treasury
     ) external initializer {
+        if (_treasury == address(0)) revert ZeroTreasury();
+        if (_uniswapV4Factory == address(0)) revert ZeroFactory();
+        
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
