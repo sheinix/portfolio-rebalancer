@@ -320,7 +320,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         int256[] memory deltas = new int256[](len);
         for (uint256 i = 0; i < len; i++) {
             uint256 currentUsd = balances[i].mulWadDown(prices[i]);
-            uint256 targetUsd = totalUSD.mulWadDown(basket[i].targetAllocation);
+            uint256 targetUsd = (totalUSD * basket[i].targetAllocation) / ALLOCATION_SCALE;
             deltas[i] = int256(currentUsd) - int256(targetUsd);
         }
         return deltas;
