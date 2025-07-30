@@ -1,0 +1,36 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "coins": {
+    "LINK": "0x326C977E6efc84E512bB9C30f76E30c160eD06FB",
+    "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    "USDT": "0x0000000000000000000000000000000000000000",
+    "WETH": "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14",
+    "WBTC": "0x0000000000000000000000000000000000000000",
+    "AAVE": "0x0000000000000000000000000000000000000000"
+  },
+  "chainlink": {
+    "agregatorV3Interface": "0x0000000000000000000000000000000000000000",
+    "priceFeedWETH": "0x694AA1769357215DE4FAC081bf1f309aDC325306",
+    "priceFeedAAVE": "0x0000000000000000000000000000000000000000",
+    "priceFeedUSDC": "0xA2F78ab2355fe2f984D808B5CeE7FD0A93D5270E",
+    "priceFeedUSDT": "0x0000000000000000000000000000000000000000",
+    "priceFeedWBTC": "0x0000000000000000000000000000000000000000",
+    "priceFeedLINK": "0xc59E3633BAAC79493d908e63626716e204A45EdF"
+  },
+  "uniswap": {
+    "uniswapV4Factory": "0x0000000000000000000000000000000000000000",
+    "uniswapV4PoolFactory": "0x0000000000000000000000000000000000000000",
+    "uniswapV4Router": "0x1111111111111111111111111111111111111111"
+  },
+  "portfolioRebalancer": {
+    "implementation": "",
+    "factoryImplementation": "",
+    "factory": "",
+    "treasury": "",
+    "treasuryImplementation": "",
+    "proxyAdmin": "",
+    "deploymentBlock": "",
+    "deploymentTimestamp": ""
+  }
+} 

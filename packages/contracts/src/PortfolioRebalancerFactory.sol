@@ -1,36 +1,61 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "./interfaces/IPortfolioRebalancer.sol";
 
 /**
  * @title PortfolioRebalancerFactory
  * @notice Deploys user-owned PortfolioRebalancer proxies (vaults) with custom baskets, fees, and treasury. Admin controls parameters.
+ * @dev UUPS upgradeable factory that deploys transparent proxies for gas efficiency.
  */
-contract PortfolioRebalancerFactory is AccessControl {
-    address public immutable implementation;
+contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+    address public implementation;
     address public treasury;
     uint256 public feeBps;
+    ProxyAdmin public proxyAdmin;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
     event VaultCreated(address indexed user, address proxy);
 
     /**
-     * @notice Initialize factory with implementation, treasury, fee, and admin.
+     * @notice Initialize factory with implementation, treasury, fee, admin, and proxy admin.
      * @param _implementation PortfolioRebalancer implementation address
      * @param _treasury Treasury address
      * @param _feeBps Fee in basis points
      * @param admin Admin address
+     * @param _proxyAdmin ProxyAdmin contract for managing transparent proxies
      */
-    constructor(address _implementation, address _treasury, uint256 _feeBps, address admin) {
+    function initialize(
+        address _implementation, 
+        address _treasury, 
+        uint256 _feeBps, 
+        address admin,
+        address _proxyAdmin
+    ) external initializer {
+        __UUPSUpgradeable_init();
+        __AccessControl_init();
+        
         implementation = _implementation;
         treasury = _treasury;
         feeBps = _feeBps;
+        proxyAdmin = ProxyAdmin(_proxyAdmin);
+        
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
+    }
+
+    /**
+     * @notice Update implementation address. Only ADMIN.
+     * @param newImplementation New implementation address
+     */
+    function setImplementation(address newImplementation) external onlyRole(ADMIN_ROLE) {
+        implementation = newImplementation;
     }
 
     /**
@@ -76,7 +101,39 @@ contract PortfolioRebalancerFactory is AccessControl {
             feeBps,
             treasury
         );
-        proxy = address(new ERC1967Proxy(implementation, data));
+        proxy = address(new TransparentUpgradeableProxy(
+            implementation,
+            address(proxyAdmin),
+            data
+        ));
         emit VaultCreated(msg.sender, proxy);
     }
+
+    /**
+     * @notice Upgrade a user's vault implementation. Only ADMIN.
+     * @param vault The vault proxy address to upgrade
+     * @param newImplementation New implementation address
+     */
+    function upgradeVault(address vault, address newImplementation) external onlyRole(ADMIN_ROLE) {
+        proxyAdmin.upgrade(ITransparentUpgradeableProxy(vault), newImplementation);
+    }
+
+    /**
+     * @notice Upgrade a user's vault implementation with call. Only ADMIN.
+     * @param vault The vault proxy address to upgrade
+     * @param newImplementation New implementation address
+     * @param data Call data to execute after upgrade
+     */
+    function upgradeVaultAndCall(
+        address vault, 
+        address newImplementation, 
+        bytes calldata data
+    ) external onlyRole(ADMIN_ROLE) {
+        proxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(vault), newImplementation, data);
+    }
+
+    /**
+     * @dev Authorizes contract upgrades. Only ADMIN can upgrade the factory.
+     */
+    function _authorizeUpgrade(address) internal override onlyRole(ADMIN_ROLE) {}
 } 

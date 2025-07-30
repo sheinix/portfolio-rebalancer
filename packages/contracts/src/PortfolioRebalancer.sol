@@ -3,7 +3,6 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -29,9 +28,9 @@ event SwapPlanned(address indexed user, address indexed tokenIn, address indexed
 /**
  * @title PortfolioRebalancer
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
- * @dev UUPS upgradeable, Ownable, ReentrancyGuard, Chainlink Keeper-compatible, uses custom errors for gas savings.
+ * @dev Uses Transparent Proxy pattern, Ownable, ReentrancyGuard, Chainlink Keeper-compatible, uses custom errors for gas savings.
  */
-contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeable, ReentrancyGuardUpgradeable, AutomationCompatibleInterface {
+contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, AutomationCompatibleInterface {
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
 
@@ -121,7 +120,6 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         if (_uniswapV4Factory == address(0)) revert ZeroFactory();
         
         __Ownable_init(msg.sender);
-        __UUPSUpgradeable_init();
         __ReentrancyGuard_init();
         uniswapV4Factory = _uniswapV4Factory;
         _setBasket(tokens, priceFeeds, allocations);
@@ -502,12 +500,6 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, UUPSUpgradeab
         }
         return amount - fee;
     }
-
-    // Upgrade Authorization
-    /**
-     * @dev Authorizes contract upgrades. Only owner can upgrade.
-     */
-    function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // View Helpers
     /**

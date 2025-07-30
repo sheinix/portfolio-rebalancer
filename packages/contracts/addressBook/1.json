@@ -1,0 +1,36 @@
+{
+  "network": "mainnet",
+  "chainId": 1,
+  "coins": {
+    "LINK": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+    "USDC": "0xA0b86a33E6411c1e95E02F14c6c5e51b1B3b3f06",
+    "USDT": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "WETH": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "WBTC": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+    "AAVE": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9"
+  },
+  "chainlink": {
+    "agregatorV3Interface": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+    "priceFeedWETH": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+    "priceFeedAAVE": "0x547a514d5e3769680Ce22B2361c10Ea13619e8a9",
+    "priceFeedUSDC": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
+    "priceFeedUSDT": "0x3E7d1eAB13ad0104d2750B8863b489D65364e32D",
+    "priceFeedWBTC": "0xF4030086522a5bEEa4988F8cA5B36dbC97BeE88c",
+    "priceFeedLINK": "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c"
+  },
+  "uniswap": {
+    "uniswapV4Factory": "0x0000000000000000000000000000000000000000",
+    "uniswapV4PoolFactory": "0x0000000000000000000000000000000000000000",
+    "uniswapV4Router": "0x0000000000000000000000000000000000000000"
+  },
+  "portfolioRebalancer": {
+    "implementation": "",
+    "factoryImplementation": "",
+    "factory": "",
+    "treasury": "",
+    "treasuryImplementation": "",
+    "proxyAdmin": "",
+    "deploymentBlock": "",
+    "deploymentTimestamp": ""
+  }
+} 

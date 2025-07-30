@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IUniswapV4.sol";
@@ -9,8 +11,9 @@ import "./interfaces/IUniswapV4.sol";
 /**
  * @title PortfolioTreasury
  * @notice Holds LINK and other tokens, swaps to LINK, and funds vault automation. Supports dynamic tokens and role-based access.
+ * @dev UUPS upgradeable treasury contract.
  */
-contract PortfolioTreasury is AccessControl {
+contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -33,7 +36,10 @@ contract PortfolioTreasury is AccessControl {
      * @param _uniswapV4Router Uniswap V4 router address
      * @param admin Admin address
      */
-    constructor(address _link, address _uniswapV4Router, address admin) {
+    function initialize(address _link, address _uniswapV4Router, address admin) external initializer {
+        __UUPSUpgradeable_init();
+        __AccessControl_init();
+        
         link = _link;
         uniswapV4Router = _uniswapV4Router;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
@@ -101,4 +107,9 @@ contract PortfolioTreasury is AccessControl {
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         emit Donation(msg.sender, token, amount);
     }
+
+    /**
+     * @dev Authorizes contract upgrades. Only ADMIN can upgrade.
+     */
+    function _authorizeUpgrade(address) internal override onlyRole(ADMIN_ROLE) {}
 } 
