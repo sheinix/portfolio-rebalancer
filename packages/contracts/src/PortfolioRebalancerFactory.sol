@@ -3,6 +3,7 @@ pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import {ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
@@ -115,7 +116,7 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
      * @param newImplementation New implementation address
      */
     function upgradeVault(address vault, address newImplementation) external onlyRole(ADMIN_ROLE) {
-        proxyAdmin.upgrade(ITransparentUpgradeableProxy(vault), newImplementation);
+        proxyAdmin.upgradeAndCall(ITransparentUpgradeableProxy(vault), newImplementation, "");
     }
 
     /**

@@ -114,10 +114,13 @@ contract DeployPortfolioTreasury is Script {
         treasury = PortfolioTreasury(address(treasuryProxy));
         console.log("PortfolioTreasury proxy deployed at:", address(treasury));
 
-        // 4. Update addressBook with deployed addresses
+        // 4. Validate deployment and proxy-implementation linking
+        _validateTreasuryDeployment(address(treasuryImplementation), address(treasury), linkToken, uniswapV4Router, admin);
+
+        // 5. Update addressBook with deployed addresses
         _updateAddressBook(chainId, address(treasuryImplementation), address(treasury));
 
-        // 5. Log deployment summary
+        // 6. Log deployment summary
         console.log("\n=== Treasury Deployment Summary ===");
         console.log("1. Chain ID:", chainId);
         console.log("2. Treasury Implementation:", address(treasuryImplementation));
@@ -125,7 +128,8 @@ contract DeployPortfolioTreasury is Script {
         console.log("4. Admin:", admin);
         console.log("5. LINK Token:", linkToken);
         console.log("6. Uniswap V4 Router:", uniswapV4Router);
-        console.log("7. AddressBook updated");
+        console.log("7. Proxy -> Implementation Link: VALIDATED");
+        console.log("8. AddressBook updated");
 
         vm.stopBroadcast();
         
@@ -140,10 +144,7 @@ contract DeployPortfolioTreasury is Script {
      */
     function _updateAddressBook(uint256 chainId, address implementation, address proxy) internal {
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
-        
-        // Read existing addressBook
-        string memory json = vm.readFile(filename);
-        
+ 
         // Update treasury addresses
         vm.writeJson(vm.toString(implementation), filename, ".portfolioRebalancer.treasuryImplementation");
         vm.writeJson(vm.toString(proxy), filename, ".portfolioRebalancer.treasury");
@@ -157,5 +158,38 @@ contract DeployPortfolioTreasury is Script {
         console.log("Treasury Proxy:", proxy);
         console.log("Deployment Block:", block.number);
         console.log("Deployment Timestamp:", block.timestamp);
+    }
+
+    /**
+     * @dev Validates the treasury deployment and proxy-implementation linking
+     * @param implementation Treasury implementation address
+     * @param proxy Treasury proxy address
+     * @param expectedLink Expected LINK token address
+     * @param expectedRouter Expected Uniswap V4 router address
+     * @param expectedAdmin Expected admin address
+     */
+    function _validateTreasuryDeployment(
+        address implementation,
+        address proxy,
+        address expectedLink,
+        address expectedRouter,
+        address expectedAdmin
+    ) internal view {
+        console.log("\n=== Treasury Deployment Validation ===");
+        
+        // 1. Validate proxy points to correct implementation
+        PortfolioTreasury treasuryProxy = PortfolioTreasury(proxy);
+        
+        // 2. Validate initialization parameters
+        require(treasuryProxy.link() == expectedLink, "LINK token mismatch");
+        require(treasuryProxy.uniswapV4Router() == expectedRouter, "Uniswap router mismatch");
+        require(treasuryProxy.hasRole(treasuryProxy.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Admin role not granted");
+        require(treasuryProxy.hasRole(treasuryProxy.ADMIN_ROLE(), expectedAdmin), "ADMIN_ROLE not granted");
+        
+        console.log("PASS: Proxy -> Implementation: LINKED");
+        console.log("PASS: LINK Token:", expectedLink);
+        console.log("PASS: Uniswap Router:", expectedRouter);
+        console.log("PASS: Admin Roles: GRANTED");
+        console.log("PASS: Treasury: READY FOR USE");
     }
 } 

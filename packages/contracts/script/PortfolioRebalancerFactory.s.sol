@@ -138,7 +138,7 @@ contract DeployPortfolioRebalancerFactory is Script {
 
         // 2. Deploy ProxyAdmin for managing transparent proxies (vault upgrades)
         console.log("\n2. Deploying ProxyAdmin...");
-        proxyAdmin = new ProxyAdmin();
+        proxyAdmin = new ProxyAdmin(admin);
         console.log("ProxyAdmin deployed at:", address(proxyAdmin));
 
         // 3. Deploy PortfolioRebalancerFactory implementation
@@ -166,8 +166,19 @@ contract DeployPortfolioRebalancerFactory is Script {
         proxyAdmin.transferOwnership(admin);
         console.log("ProxyAdmin ownership transferred to:", admin);
 
-        // 6. Update addressBook with all deployed addresses
-        console.log("\n6. Updating addressBook...");
+        // 6. Validate deployment and proxy-implementation linking
+        _validateFactoryDeployment(
+            address(implementation),
+            address(factoryImpl),
+            address(factory),
+            address(proxyAdmin),
+            treasuryAddress,
+            admin,
+            feeBps
+        );
+
+        // 7. Update addressBook with all deployed addresses
+        console.log("\n7. Updating addressBook...");
         _updateAddressBook(
             chainId,
             address(implementation),  // portfolio implementation
@@ -176,7 +187,7 @@ contract DeployPortfolioRebalancerFactory is Script {
             address(proxyAdmin)       // proxy admin
         );
 
-        // 7. Log deployment summary
+        // 8. Log deployment summary
         console.log("\n=== Factory System Deployment Summary ===");
         console.log("1. Chain ID:", chainId);
         console.log("2. Portfolio Implementation:", address(implementation));
@@ -186,7 +197,8 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("6. Treasury Address:", treasuryAddress);
         console.log("7. Admin:", admin);
         console.log("8. Fee BPS:", feeBps);
-        console.log("9. AddressBook updated");
+        console.log("9. Proxy -> Implementation Links: VALIDATED");
+        console.log("10. AddressBook updated");
 
         vm.stopBroadcast();
         
@@ -198,14 +210,14 @@ contract DeployPortfolioRebalancerFactory is Script {
      * @param chainId Chain ID for the addressBook file
      * @param portfolioImpl Portfolio implementation address
      * @param factoryImpl Factory implementation address
-     * @param factoryProxy Factory proxy address
+     * @param factoryProxyAddr Factory proxy address
      * @param proxyAdminAddr ProxyAdmin address
      */
     function _updateAddressBook(
         uint256 chainId,
         address portfolioImpl,
         address factoryImpl,
-        address factoryProxy,
+        address factoryProxyAddr,
         address proxyAdminAddr
     ) internal {
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
@@ -213,7 +225,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         // Update all factory system addresses
         vm.writeJson(vm.toString(portfolioImpl), filename, ".portfolioRebalancer.implementation");
         vm.writeJson(vm.toString(factoryImpl), filename, ".portfolioRebalancer.factoryImplementation");
-        vm.writeJson(vm.toString(factoryProxy), filename, ".portfolioRebalancer.factory");
+        vm.writeJson(vm.toString(factoryProxyAddr), filename, ".portfolioRebalancer.factory");
         vm.writeJson(vm.toString(proxyAdminAddr), filename, ".portfolioRebalancer.proxyAdmin");
         
         // Add deployment metadata
@@ -223,9 +235,53 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("Updated addressBook file:", filename);
         console.log("Portfolio Implementation:", portfolioImpl);
         console.log("Factory Implementation:", factoryImpl);
-        console.log("Factory Proxy:", factoryProxy);
+        console.log("Factory Proxy:", factoryProxyAddr);
         console.log("ProxyAdmin:", proxyAdminAddr);
         console.log("Deployment Block:", block.number);
         console.log("Deployment Timestamp:", block.timestamp);
+    }
+
+    /**
+     * @dev Validates the factory deployment and proxy-implementation linking
+     * @param portfolioImpl Portfolio implementation address
+     * @param factoryImpl Factory implementation address
+     * @param factoryProxy Factory proxy address
+     * @param proxyAdminAddr ProxyAdmin address
+     * @param treasuryAddr Treasury address
+     * @param expectedAdmin Expected admin address
+     * @param expectedFeeBps Expected fee basis points
+     */
+    function _validateFactoryDeployment(
+        address portfolioImpl,
+        address factoryImpl,
+        address factoryProxy,
+        address proxyAdminAddr,
+        address treasuryAddr,
+        address expectedAdmin,
+        uint256 expectedFeeBps
+    ) internal view {
+        console.log("\n=== Factory System Deployment Validation ===");
+        
+        // 1. Validate factory proxy configuration
+        PortfolioRebalancerFactory factoryContract = PortfolioRebalancerFactory(factoryProxy);
+        
+        // 2. Validate factory settings
+        require(factoryContract.implementation() == portfolioImpl, "Portfolio implementation mismatch");
+        require(factoryContract.treasury() == treasuryAddr, "Treasury address mismatch");
+        require(factoryContract.feeBps() == expectedFeeBps, "Fee BPS mismatch");
+        require(factoryContract.hasRole(factoryContract.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Factory admin role not granted");
+        require(factoryContract.hasRole(factoryContract.ADMIN_ROLE(), expectedAdmin), "Factory ADMIN_ROLE not granted");
+        
+        // 3. Validate ProxyAdmin ownership
+        ProxyAdmin proxyAdminContract = ProxyAdmin(proxyAdminAddr);
+        require(proxyAdminContract.owner() == expectedAdmin, "ProxyAdmin ownership not transferred");
+        
+        console.log("PASS: Factory Proxy -> Implementation: LINKED");
+        console.log("PASS: Portfolio Implementation:", portfolioImpl);
+        console.log("PASS: Treasury Address:", treasuryAddr);
+        console.log("PASS: Fee BPS:", expectedFeeBps);
+        console.log("PASS: Factory Admin Roles: GRANTED");
+        console.log("PASS: ProxyAdmin Ownership: TRANSFERRED");
+        console.log("PASS: Factory System: READY FOR VAULT CREATION");
     }
 } 

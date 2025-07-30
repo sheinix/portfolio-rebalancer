@@ -78,6 +78,9 @@ The deployment system uses a **modular architecture** with specialized scripts f
 # Deploy complete system using addressBook
 forge script script/PortfolioRebalancer.s.sol --rpc-url sepolia --broadcast
 
+# Deploy complete system WITH Etherscan verification (RECOMMENDED)
+forge script script/PortfolioRebalancer.s.sol --rpc-url sepolia --broadcast --verify
+
 # Deploy with custom treasury parameters
 forge script script/PortfolioRebalancer.s.sol \
   --sig "runWithCustomTreasury(address,address,address)" \
@@ -103,8 +106,14 @@ forge script script/PortfolioRebalancer.s.sol \
 # Deploy only Treasury
 forge script script/PortfolioTreasury.s.sol --rpc-url sepolia --broadcast
 
+# Deploy Treasury WITH Etherscan verification
+forge script script/PortfolioTreasury.s.sol --rpc-url sepolia --broadcast --verify
+
 # Deploy only Factory (requires existing treasury)
 forge script script/PortfolioRebalancerFactory.s.sol --rpc-url sepolia --broadcast
+
+# Deploy Factory WITH Etherscan verification
+forge script script/PortfolioRebalancerFactory.s.sol --rpc-url sepolia --broadcast --verify
 
 # Deploy Factory with custom treasury
 forge script script/PortfolioRebalancerFactory.s.sol \
@@ -190,6 +199,63 @@ cast call $(cat addressBook/11155111.json | jq -r '.coins.LINK') \
 3. **Factory Deployment**: `PortfolioRebalancerFactory.s.sol` deploys factory system and updates addressBook
 4. **Full System**: `PortfolioRebalancer.s.sol` orchestrates both deployments with final summary
 5. **Query/Verify**: Use `QueryDeployments.s.sol` to verify deployment and get addresses
+
+## Etherscan Verification Setup
+
+### Prerequisites for Contract Verification
+
+1. **Get API Keys** from block explorers:
+
+   ```bash
+   # Add to your .env file
+   ETHERSCAN_API_KEY=your_etherscan_api_key_here
+   POLYGONSCAN_API_KEY=your_polygonscan_api_key_here
+   ARBISCAN_API_KEY=your_arbiscan_api_key_here
+   OPTIMISTIC_API_KEY=your_optimistic_etherscan_api_key_here
+   BASESCAN_API_KEY=your_basescan_api_key_here
+   ```
+
+2. **Supported Networks** (configured in `foundry.toml`):
+   - Ethereum Mainnet & Sepolia
+   - Polygon & Mumbai
+   - Arbitrum One & Sepolia
+   - Optimism & Sepolia
+   - Base & Sepolia
+
+### Automatic Verification During Deployment
+
+```bash
+# Add --verify flag to any deployment command
+forge script script/PortfolioRebalancer.s.sol \
+  --rpc-url sepolia \
+  --private-key $PRIVATE_KEY \
+  --broadcast \
+  --verify
+```
+
+### Manual Verification (if automatic fails)
+
+```bash
+# Verify Treasury Implementation
+forge verify-contract $TREASURY_IMPL \
+  src/PortfolioTreasury.sol:PortfolioTreasury \
+  --chain-id 11155111 \
+  --watch
+
+# Verify Factory Implementation
+forge verify-contract $FACTORY_IMPL \
+  src/PortfolioRebalancerFactory.sol:PortfolioRebalancerFactory \
+  --chain-id 11155111 \
+  --watch
+
+# Verify Portfolio Implementation
+forge verify-contract $PORTFOLIO_IMPL \
+  src/PortfolioRebalancer.sol:PortfolioRebalancer \
+  --chain-id 11155111 \
+  --watch
+```
+
+**Note**: Proxy contracts are automatically recognized by Etherscan and linked to their implementations.
 
 ## Adding New Networks
 

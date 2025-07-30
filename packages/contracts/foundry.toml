@@ -11,13 +11,16 @@ src = "src"
 out = "out"
 libs = ["lib"]
 test = "test"
-cache = true                                              # incremental builds
-auto_detect_solc = false                                  # pin compiler ↓
-solc_version = "0.8.24"                                   # upgrade only after audit
+cache = true # incremental builds
+auto_detect_solc = false # pin compiler ↓
+solc_version = "0.8.24" # upgrade only after audit
 optimizer = true
-optimizer_runs = 1000000                                  # high runs = tighter runtime gas
-via_ir = true                                             # use Yul IR pipeline (smaller bytecode)
-fs_permissions = [{ access = "read", path = "./script" }] # enable ffi read ops
+optimizer_runs = 1000000 # high runs = tighter runtime gas
+via_ir = true # use Yul IR pipeline (smaller bytecode)
+fs_permissions = [
+    { access = "read", path = "./script" },            # enable ffi read ops
+    { access = "read-write", path = "./addressBook" }, # allow address book read/write
+]
 ffi = true
 dotenv = true
 #####################
@@ -84,13 +87,22 @@ bsc-testnet = "${BSC_TEST_RPC_URL}"
 #  API key based on the chain-id of --rpc-url.
 #
 [etherscan]
-1 = { key = "${ETHERSCAN_API_KEY}" } # Ethereum single api key V2
+1 = { key = "${ETHERSCAN_API_KEY}" }         # Ethereum Mainnet
+11155111 = { key = "${ETHERSCAN_API_KEY}" }  # Sepolia Testnet
+137 = { key = "${POLYGONSCAN_API_KEY}" }     # Polygon Mainnet
+80001 = { key = "${POLYGONSCAN_API_KEY}" }   # Mumbai Testnet
+42161 = { key = "${ARBISCAN_API_KEY}" }      # Arbitrum One
+421614 = { key = "${ARBISCAN_API_KEY}" }     # Arbitrum Sepolia
+10 = { key = "${OPTIMISTIC_API_KEY}" }       # Optimism Mainnet
+11155420 = { key = "${OPTIMISTIC_API_KEY}" } # Optimism Sepolia
+8453 = { key = "${BASESCAN_API_KEY}" }       # Base Mainnet
+84532 = { key = "${BASESCAN_API_KEY}" }      # Base Sepolia
 
 #########################
 #  Forge script params  #
 #########################
 # These make `forge script` invocations shorter; you can still
 # override with CLI flags on CI or locally.
-# eth_rpc_url        = "${SEPOLIA_RPC_URL}"
-# block_gas_limit    = 30000000
-# private_key      = "${PRIVATE_KEY}"           # never commit!  set in CI env
+# eth_rpc_url = "${SEPOLIA_RPC_URL}"
+# block_gas_limit = 30000000
+# private_key = "${PRIVATE_KEY}" # never commit!  set in CI env

@@ -27,10 +27,10 @@
     "implementation": "",
     "factoryImplementation": "",
     "factory": "",
-    "treasury": "",
-    "treasuryImplementation": "",
+    "treasury": "0x6e567f3cd3b7a11Be0Dd0c35C3b3f8ca8a956B9d",
+    "treasuryImplementation": "0xe96FCFEDf67405f570c586727cD85D678B5F10f5",
     "proxyAdmin": "",
     "deploymentBlock": "",
     "deploymentTimestamp": ""
   }
-} 
+}
