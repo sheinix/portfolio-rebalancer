@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {DeployPortfolioTreasury} from "./PortfolioTreasury.s.sol";
 import {DeployPortfolioRebalancerFactory} from "./PortfolioRebalancerFactory.s.sol";
+import {PortfolioTreasury} from "../src/PortfolioTreasury.sol";
 
 /**
  * @title DeployPortfolioRebalancer
@@ -43,7 +44,12 @@ contract DeployPortfolioRebalancer is Script {
         factoryAddress = factoryDeployer.run();
         console.log("COMPLETE: Factory deployment completed");
         
-        // 3. Final summary with verification instructions
+        // 3. Configure factory role in treasury for automation
+        console.log("\n=== Step 3: Configuring Factory Role for Automation ===");
+        _configureFactoryRole(treasuryAddress, factoryAddress);
+        console.log("COMPLETE: Factory role configured for automation");
+        
+        // 4. Final summary with verification instructions
         _logFinalSummaryWithVerification(chainId);
     }
 
@@ -91,10 +97,15 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Deployer:", msg.sender);
         console.log("Treasury Admin:", treasuryAdmin);
         
+        // Read automation registry from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        string memory json = vm.readFile(filename);
+        address automationRegistry = vm.parseJsonAddress(json, ".automationRegistry");
+        
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
-        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, treasuryAdmin);
+        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
         console.log("!! Treasury deployment completed");
         
         // 2. Deploy Factory system (reads treasury address from addressBook)
@@ -131,10 +142,15 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Factory Admin:", factoryAdmin);
         console.log("Fee BPS:", feeBps);
         
+        // Read automation registry from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        string memory json = vm.readFile(filename);
+        address automationRegistry = vm.parseJsonAddress(json, ".automationRegistry");
+        
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
-        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, treasuryAdmin);
+        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
         console.log("!! Treasury deployment completed");
         
         // 2. Deploy Factory system with custom parameters
@@ -242,5 +258,22 @@ contract DeployPortfolioRebalancer is Script {
         console.log("  3. Set up monitoring and governance");
         console.log("");
         console.log(">>> System is ready for production use! <<<");
+    }
+
+    /**
+     * @dev Configure factory role in treasury to enable automation registration
+     * @param treasuryAddr Treasury contract address
+     * @param factoryAddr Factory contract address
+     */
+    function _configureFactoryRole(address treasuryAddr, address factoryAddr) internal {
+        vm.startBroadcast();
+        
+        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddr);
+        treasury.setFactory(factoryAddr);
+        
+        vm.stopBroadcast();
+        
+        console.log("Factory role granted to:", factoryAddr);
+        console.log("Treasury can now register upkeeps for vaults created by factory");
     }
 }

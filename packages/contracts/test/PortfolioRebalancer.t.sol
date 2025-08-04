@@ -15,7 +15,7 @@ contract PortfolioRebalancerTest is Test {
     uint256[] allocations;
     address owner = address(0xABCD);
     address treasury = address(0xBEEF);
-    address uniswapV4Factory = address(0xCAFE);
+    address uniswapV3Factory = address(0xCAFE);
 
     function setUp() public {
         _setupTokens();
@@ -62,14 +62,14 @@ contract PortfolioRebalancerTest is Test {
             );
         }
         
-        // Mock Uniswap factory calls for all token pairs
+        // Mock Uniswap V3 factory calls for all token pairs
         for (uint i = 0; i < 6; i++) {
             for (uint j = 0; j < 6; j++) {
                 if (i != j) {
                     vm.mockCall(
-                        uniswapV4Factory,
+                        uniswapV3Factory,
                         0,
-                        abi.encodeWithSignature("getPool(address,address)"),
+                        abi.encodeWithSignature("getPool(address,address,uint24)"),
                         abi.encode(address(0x1234)) // Mock pool address
                     );
                 }
@@ -94,7 +94,7 @@ contract PortfolioRebalancerTest is Test {
     }
 
     function _setupInitializedContract() internal {
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     // --- initialize Validation Tests ---
@@ -114,7 +114,7 @@ contract PortfolioRebalancerTest is Test {
         }
         
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     function test_initialize_Revert_AllocationSumMismatch() public {
@@ -130,7 +130,7 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 400_000; // sum != 1e6
         
         vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     function test_initialize_Revert_ZeroAddress() public {
@@ -146,12 +146,12 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 500_000;
         
         vm.expectRevert(PortfolioRebalancer.ZeroAddress.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     function test_initialize_Success() public {
         // Test successful initialization
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
         
         // Verify the basket was set correctly
         (address token, address priceFeed, uint256 targetAllocation) = rebalancer.basket(0);
@@ -161,7 +161,7 @@ contract PortfolioRebalancerTest is Test {
         assertEq(rebalancer.rebalanceThreshold(), 10_000);
         assertEq(rebalancer.feeBps(), 10);
         assertEq(rebalancer.treasury(), treasury);
-        assertEq(rebalancer.uniswapV4Factory(), uniswapV4Factory);
+        assertEq(rebalancer.uniswapV3Factory(), uniswapV3Factory);
     }
 
     function test_initialize_Revert_EmptyArrays() public {
@@ -171,7 +171,7 @@ contract PortfolioRebalancerTest is Test {
         uint256[] memory emptyAllocs = new uint256[](0);
         
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     function test_initialize_Revert_ArrayLengthMismatch() public {
@@ -188,13 +188,13 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 500_000;
         
         vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     function test_initialize_Revert_ZeroTreasury() public {
         // Try to initialize with zero treasury address
         vm.expectRevert(PortfolioRebalancer.ZeroTreasury.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, address(0));
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, address(0));
     }
 
     function test_initialize_Revert_ZeroFactory() public {
@@ -205,11 +205,11 @@ contract PortfolioRebalancerTest is Test {
 
     function test_initialize_Revert_DoubleInitialization() public {
         // Initialize once successfully
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
         
         // Try to initialize again (should revert due to initializer modifier)
         vm.expectRevert();
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
     }
 
     // --- setBasket Validation Tests ---
@@ -238,9 +238,9 @@ contract PortfolioRebalancerTest is Test {
         
         // Override mock so the Uniswap factory returns address(0) for getPool calls
         vm.mockCall(
-            uniswapV4Factory,
+            uniswapV3Factory,
             0,
-            abi.encodeWithSignature("getPool(address,address)"),
+            abi.encodeWithSignature("getPool(address,address,uint24)"),
             abi.encode(address(0)) // Return address(0) to simulate no pool
         );
         
@@ -498,7 +498,7 @@ contract PortfolioRebalancerTest is Test {
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
         
         // Check swap approval was set (should be max uint256)
-        assertEq(IERC20(depositToken).allowance(address(rebalancer), uniswapV4Factory), type(uint256).max);
+        assertEq(IERC20(depositToken).allowance(address(rebalancer), uniswapV3Factory), type(uint256).max);
         
         // Check that the Deposit event was emitted
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -543,7 +543,7 @@ contract PortfolioRebalancerTest is Test {
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
         
         // Check swap approval was set (should be max uint256)
-        assertEq(IERC20(depositToken).allowance(address(rebalancer), uniswapV4Factory), type(uint256).max);
+        assertEq(IERC20(depositToken).allowance(address(rebalancer), uniswapV3Factory), type(uint256).max);
         
         // Check that events were emitted (Deposit + potentially Rebalanced and SwapPlanned/SwapExecuted)
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -578,12 +578,12 @@ contract PortfolioRebalancerTest is Test {
         
         // First deposit
         rebalancer.deposit(depositToken, depositAmount, false);
-        uint256 allowanceAfterFirst = IERC20(depositToken).allowance(address(rebalancer), uniswapV4Factory);
+        uint256 allowanceAfterFirst = IERC20(depositToken).allowance(address(rebalancer), uniswapV3Factory);
         assertEq(allowanceAfterFirst, type(uint256).max);
         
         // Second deposit - allowance should still be max (not reset)
         rebalancer.deposit(depositToken, depositAmount, false);
-        uint256 allowanceAfterSecond = IERC20(depositToken).allowance(address(rebalancer), uniswapV4Factory);
+        uint256 allowanceAfterSecond = IERC20(depositToken).allowance(address(rebalancer), uniswapV3Factory);
         assertEq(allowanceAfterSecond, type(uint256).max);
         
         // Verify total user balance
@@ -840,7 +840,7 @@ contract PortfolioRebalancerTest is Test {
 
     function test_computeDeltaUsd() public {
         PortfolioRebalancerTestable testable = new PortfolioRebalancerTestable();
-        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV4Factory, 10, treasury);
+        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
         
         // Setup test data: 6 tokens (matching the basket) with specific balances and prices
         uint256[] memory balances = new uint256[](6);

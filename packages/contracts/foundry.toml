@@ -17,6 +17,9 @@ solc_version = "0.8.24" # upgrade only after audit
 optimizer = true
 optimizer_runs = 1000000 # high runs = tighter runtime gas
 via_ir = true # use Yul IR pipeline (smaller bytecode)
+ignored_error_codes = [
+    3628,
+] # ignore payable fallback warnings from lib dependencies
 fs_permissions = [
     { access = "read", path = "./script" },            # enable ffi read ops
     { access = "read-write", path = "./addressBook" }, # allow address book read/write

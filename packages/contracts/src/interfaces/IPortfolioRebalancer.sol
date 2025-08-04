@@ -7,7 +7,7 @@ interface IPortfolioRebalancer {
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 rebalanceThreshold,
-        address uniswapV4Factory,
+        address uniswapV3Factory,
         uint256 feeBps,
         address treasury
     ) external;

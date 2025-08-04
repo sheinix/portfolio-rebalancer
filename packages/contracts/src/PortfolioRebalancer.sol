@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solmate/utils/FixedPointMathLib.sol";
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/automation/AutomationCompatible.sol";
-import "./interfaces/IUniswapV4.sol";
+import "./interfaces/IUniswapV3.sol";
 
 struct PortfolioSnapshot {
     uint256[] balances;
@@ -34,8 +34,11 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
 
-    // Uniswap V4 factory address (set at initialization)
-    address public uniswapV4Factory;
+    // Uniswap V3 factory address (set at initialization)
+    address public uniswapV3Factory;
+    
+    // Default fee tier for V3 pools (0.3% = 3000)
+    uint24 public constant DEFAULT_FEE = 3000;
 
     // Constants
     uint256 public constant MAX_TOKENS = 6;
@@ -103,7 +106,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param _rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
-     * @param _uniswapV4Factory Uniswap V4 factory address.
+     * @param _uniswapV3Factory Uniswap V3 factory address.
      * @param _feeBps Fee in basis points (e.g., 10 = 0.1%). Immutable after initialization.
      * @param _treasury Treasury address for fee collection. Immutable after initialization.
      */
@@ -112,16 +115,16 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 _rebalanceThreshold,
-        address _uniswapV4Factory,
+        address _uniswapV3Factory,
         uint256 _feeBps,
         address _treasury
     ) external initializer {
         if (_treasury == address(0)) revert ZeroTreasury();
-        if (_uniswapV4Factory == address(0)) revert ZeroFactory();
+        if (_uniswapV3Factory == address(0)) revert ZeroFactory();
         
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
-        uniswapV4Factory = _uniswapV4Factory;
+        uniswapV3Factory = _uniswapV3Factory;
         _setBasket(tokens, priceFeeds, allocations);
         rebalanceThreshold = _rebalanceThreshold;
         feeBps = _feeBps;
@@ -154,7 +157,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         if (len != priceFeeds.length || len != allocations.length) revert AllocationSumMismatch();
         uint256 sum;
         _clearBasketAndWhitelist();
-        _checkUniswapV4Pools(tokens);
+        _checkUniswapV3Pools(tokens);
         for (uint256 i = 0; i < len; i++) {
             if (tokens[i] == address(0) || priceFeeds[i] == address(0)) revert ZeroAddress();
             _validatePriceFeed(priceFeeds[i]);
@@ -215,7 +218,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         if (amount == 0) revert InvalidAmount();
         userBalances[msg.sender][token] += amount;
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        _ensureSwapApproval(token); // Infinite-approve for Uniswap swaps
+        _ensureSwapApproval(token); // Infinite-approve for Uniswap V3 swaps
         if (autoRebalance) {
             (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
             _rebalance(msg.sender, snapshot);
@@ -253,7 +256,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
 
     // Rebalance Logic
     /**
-     * @notice Manually rebalance your vault to match target allocations using Uniswap V4. Only callable by the vault owner.
+     * @notice Manually rebalance your vault to match target allocations using Uniswap V3. Only callable by the vault owner.
      */
     function rebalance() external nonReentrant onlyOwner {
         (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
@@ -370,7 +373,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
             // Calculate amountToSell in tokenIn decimals
             uint256 amountToSell = tradeUsd.divWadDown(prices[sellIdx]);
             emit SwapPlanned(user, tokenIn, tokenOut, tradeUsd);
-            (, int256 amount1) = IUniswapV4Pool(pool).swap(
+            (, int256 amount1) = IUniswapV3Pool(pool).swap(
                 address(this),
                 true, // tokenIn -> tokenOut
                 int256(amountToSell),
@@ -451,29 +454,29 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     }
 
     /**
-     * @dev Ensures the contract has infinite approval for the token to the Uniswap V4 factory (or router/pool as needed).
+     * @dev Ensures the contract has infinite approval for the token to the Uniswap V3 factory (or router/pool as needed).
      *      Only sets approval if allowance is low, to save gas.
      */
     function _ensureSwapApproval(address token) internal {
-        address spender = uniswapV4Factory; // Set to router/pool if needed
+        address spender = uniswapV3Factory; // Set to router/pool if needed
         if (IERC20(token).allowance(address(this), spender) < type(uint256).max / 2) {
             IERC20(token).approve(spender, type(uint256).max);
         }
     }
 
     /**
-     * @dev Checks and caches Uniswap V4 pools for all token pairs in the basket.
+     * @dev Checks and caches Uniswap V3 pools for all token pairs in the basket.
      *      Reverts if any pair is missing a pool or has zero liquidity.
      */
-    function _checkUniswapV4Pools(address[] calldata tokens) internal {
+    function _checkUniswapV3Pools(address[] calldata tokens) internal {
         uint256 len = tokens.length;
-        IUniswapV4PoolFactory factory = IUniswapV4PoolFactory(uniswapV4Factory);
+        IUniswapV3Factory factory = IUniswapV3Factory(uniswapV3Factory);
         for (uint256 i = 0; i < len; i++) {
             for (uint256 j = 0; j < len; j++) {
                 if (i == j) continue;
-                address pool = factory.getPool(tokens[i], tokens[j]);
+                address pool = factory.getPool(tokens[i], tokens[j], DEFAULT_FEE);
                 if (pool == address(0)) revert NoPoolForToken();
-                uint128 liquidity = IUniswapV4Pool(pool).liquidity();
+                uint128 liquidity = IUniswapV3Pool(pool).liquidity();
                 if (liquidity == 0) revert NoLiquidityForToken();
                 swapPools[tokens[i]][tokens[j]] = pool; // Cache the pool address
             }
@@ -523,7 +526,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     /**
      * @notice Returns the Uniswap V4 factory address.
      */
-    function getUniswapV4Factory() external view returns (address) {
-        return uniswapV4Factory;
+    function getUniswapV3Factory() external view returns (address) {
+        return uniswapV3Factory;
     }
 }

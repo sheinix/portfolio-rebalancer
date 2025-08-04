@@ -24,25 +24,29 @@ contract DeployPortfolioTreasury is Script {
         string memory json = vm.readFile(filename);
         
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
-        address uniswapV4Router = vm.parseJsonAddress(json, ".uniswap.uniswapV4Router");
+        address uniswapV3Router = vm.parseJsonAddress(json, ".uniswap.router");
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
         address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("LINK Token from addressBook:", linkToken);
-        console.log("Uniswap V4 Router from addressBook:", uniswapV4Router);
+        console.log("Uniswap V3 Router from addressBook:", uniswapV3Router);
+        console.log("Automation Registry from addressBook:", automationRegistry);
         
-        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
     }
 
     /**
      * @notice Deploy treasury with custom parameters (override addressBook)
      * @param linkToken LINK token address
      * @param uniswapV4Router Uniswap V4 router address
+     * @param automationRegistry Chainlink Automation Registry address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
      */
     function deployWithParams(
         address linkToken,
         address uniswapV4Router,
+        address automationRegistry,
         address admin
     ) public returns (address treasuryAddress) {
         uint256 chainId = block.chainid;
@@ -50,9 +54,10 @@ contract DeployPortfolioTreasury is Script {
         console.log("Deploying with custom parameters (bypassing addressBook)");
         console.log("LINK Token:", linkToken);
         console.log("Uniswap V4 Router:", uniswapV4Router);
+        console.log("Automation Registry:", automationRegistry);
         console.log("Admin:", admin);
         
-        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, automationRegistry, admin);
     }
 
     /**
@@ -68,13 +73,15 @@ contract DeployPortfolioTreasury is Script {
         
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
         address uniswapV4Router = vm.parseJsonAddress(json, ".uniswap.uniswapV4Router");
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
         address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("Target Chain ID:", chainId);
         console.log("LINK Token:", linkToken);
         console.log("Uniswap V4 Router:", uniswapV4Router);
+        console.log("Automation Registry:", automationRegistry);
         
-        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, automationRegistry, admin);
     }
 
     /**
@@ -82,6 +89,7 @@ contract DeployPortfolioTreasury is Script {
      * @param chainId Chain ID for addressBook updates
      * @param linkToken LINK token address
      * @param uniswapV4Router Uniswap V4 router address
+     * @param automationRegistry Chainlink Automation Registry address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
      */
@@ -89,6 +97,7 @@ contract DeployPortfolioTreasury is Script {
         uint256 chainId,
         address linkToken,
         address uniswapV4Router,
+        address automationRegistry,
         address admin
     ) internal returns (address treasuryAddress) {
         vm.startBroadcast();
@@ -106,6 +115,7 @@ contract DeployPortfolioTreasury is Script {
             PortfolioTreasury.initialize.selector,
             linkToken,
             uniswapV4Router,
+            payable(automationRegistry),
             admin
         );
 
@@ -181,7 +191,7 @@ contract DeployPortfolioTreasury is Script {
         
         // 2. Validate initialization parameters
         require(treasuryContract.link() == expectedLink, "LINK token mismatch");
-        require(treasuryContract.uniswapV4Router() == expectedRouter, "Uniswap router mismatch");
+        require(treasuryContract.uniswapV3Router() == expectedRouter, "Uniswap router mismatch");
         require(treasuryContract.hasRole(treasuryContract.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Admin role not granted");
         require(treasuryContract.hasRole(treasuryContract.ADMIN_ROLE(), expectedAdmin), "ADMIN_ROLE not granted");
         

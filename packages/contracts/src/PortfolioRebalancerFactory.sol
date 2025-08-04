@@ -8,6 +8,7 @@ import "@openzeppelin-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "./interfaces/IPortfolioRebalancer.sol";
+import "./PortfolioTreasury.sol";
 
 /**
  * @title PortfolioRebalancerFactory
@@ -22,7 +23,7 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
 
-    event VaultCreated(address indexed user, address proxy);
+    event VaultCreated(address indexed user, address proxy, uint256 indexed upkeepId);
 
     /**
      * @notice Initialize factory with implementation, treasury, fee, admin, and proxy admin.
@@ -77,12 +78,14 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
     }
 
     /**
-     * @notice Deploy a new PortfolioRebalancer vault for the user.
+     * @notice Deploy a new PortfolioRebalancer vault for the user with Chainlink Automation.
      * @param tokens ERC-20 token addresses.
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
      * @param uniswapV4Factory Uniswap V4 factory address.
+     * @param gasLimit Gas limit for automation performUpkeep calls.
+     * @param linkAmount Amount of LINK to fund the automation upkeep.
      * @return proxy The address of the new proxy vault.
      */
     function createVault(
@@ -90,7 +93,9 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 rebalanceThreshold,
-        address uniswapV4Factory
+        address uniswapV4Factory,
+        uint32 gasLimit,
+        uint96 linkAmount
     ) external returns (address proxy) {
         bytes memory data = abi.encodeWithSelector(
             IPortfolioRebalancer.initialize.selector,
@@ -107,7 +112,16 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
             address(proxyAdmin),
             data
         ));
-        emit VaultCreated(msg.sender, proxy);
+        
+        // Register vault with Chainlink Automation via treasury
+        uint256 upkeepId = PortfolioTreasury(treasury).registerAndFundUpkeep(
+            proxy,
+            abi.encodePacked(proxy), // Simple checkData encoding vault address
+            gasLimit,
+            linkAmount
+        );
+        
+        emit VaultCreated(msg.sender, proxy, upkeepId);
     }
 
     /**
