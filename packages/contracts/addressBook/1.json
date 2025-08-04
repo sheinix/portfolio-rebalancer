@@ -19,9 +19,9 @@
     "priceFeedLINK": "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c"
   },
   "uniswap": {
-    "uniswapV4Factory": "0x0000000000000000000000000000000000000000",
-    "uniswapV4PoolFactory": "0x0000000000000000000000000000000000000000",
-    "uniswapV4Router": "0x0000000000000000000000000000000000000000"
+    "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "quoter": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
   },
   "portfolioRebalancer": {
     "implementation": "",
