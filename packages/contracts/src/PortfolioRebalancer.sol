@@ -17,12 +17,15 @@ struct PortfolioSnapshot {
     uint256 totalUSD;
 }
 
- struct TokenDelta {
+struct TokenDelta {
     uint256 index;
     int256 usd;
 }
 
-event SwapExecuted(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
+event SwapExecuted(
+    address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut
+);
+
 event SwapPlanned(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 usdAmount);
 
 /**
@@ -30,13 +33,18 @@ event SwapPlanned(address indexed user, address indexed tokenIn, address indexed
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
  * @dev Uses Transparent Proxy pattern, Ownable, ReentrancyGuard, Chainlink Keeper-compatible, uses custom errors for gas savings.
  */
-contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, AutomationCompatibleInterface {
+contract PortfolioRebalancer is
+    Initializable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable,
+    AutomationCompatibleInterface
+{
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
 
     // Uniswap V3 factory address (set at initialization)
     address public uniswapV3Factory;
-    
+
     // Default fee tier for V3 pools (0.3% = 3000)
     uint24 public constant DEFAULT_FEE = 3000;
 
@@ -63,7 +71,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
 
     // tokenA => tokenB => pool address
     mapping(address => mapping(address => address)) public swapPools;
-    
+
     // Rebalance threshold (in ALLOCATION_SCALE units, e.g. 0.01 = 10,000)
     uint256 public rebalanceThreshold;
 
@@ -121,7 +129,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     ) external initializer {
         if (_treasury == address(0)) revert ZeroTreasury();
         if (_uniswapV3Factory == address(0)) revert ZeroFactory();
-        
+
         __Ownable_init(msg.sender);
         __ReentrancyGuard_init();
         uniswapV3Factory = _uniswapV3Factory;
@@ -139,19 +147,16 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      */
-    function setBasket(
-        address[] calldata tokens,
-        address[] calldata priceFeeds,
-        uint256[] calldata allocations
-    ) external onlyOwner {
+    function setBasket(address[] calldata tokens, address[] calldata priceFeeds, uint256[] calldata allocations)
+        external
+        onlyOwner
+    {
         _setBasket(tokens, priceFeeds, allocations);
     }
 
-    function _setBasket(
-        address[] calldata tokens,
-        address[] calldata priceFeeds,
-        uint256[] calldata allocations
-    ) internal {
+    function _setBasket(address[] calldata tokens, address[] calldata priceFeeds, uint256[] calldata allocations)
+        internal
+    {
         uint256 len = tokens.length;
         if (len == 0 || len > MAX_TOKENS) revert ExceedsMaxTokens();
         if (len != priceFeeds.length || len != allocations.length) revert AllocationSumMismatch();
@@ -316,7 +321,11 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     /**
      * @dev Computes the USD delta for each token: currentUsd - targetUsd.
      */
-    function _computeDeltaUsd(uint256[] memory balances, uint256[] memory prices, uint256 totalUSD) internal view returns (int256[] memory) {
+    function _computeDeltaUsd(uint256[] memory balances, uint256[] memory prices, uint256 totalUSD)
+        internal
+        view
+        returns (int256[] memory)
+    {
         uint256 len = basket.length;
         int256[] memory deltas = new int256[](len);
         for (uint256 i = 0; i < len; i++) {
@@ -326,8 +335,6 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         }
         return deltas;
     }
-
-   
 
     /**
      * @dev Performs the rebalance for a user using Greedy Pairwise Matching. Assumes infinite approvals are set in deposit().
@@ -359,7 +366,8 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         uint256 s = 0;
         uint256 b = 0;
         while (s < sellerCount && b < buyerCount) {
-            uint256 tradeUsd = uint256(sellers[s].usd) < uint256(buyers[b].usd) ? uint256(sellers[s].usd) : uint256(buyers[b].usd);
+            uint256 tradeUsd =
+                uint256(sellers[s].usd) < uint256(buyers[b].usd) ? uint256(sellers[s].usd) : uint256(buyers[b].usd);
             uint256 sellIdx = sellers[s].index;
             uint256 buyIdx = buyers[b].index;
             address tokenIn = basket[sellIdx].token;
@@ -367,7 +375,8 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
             address pool = swapPools[tokenIn][tokenOut];
             if (pool == address(0)) {
                 // skip if no pool (should not happen)
-                if (sellers[s].usd <= buyers[b].usd) s++; else b++;
+                if (sellers[s].usd <= buyers[b].usd) s++;
+                else b++;
                 continue;
             }
             // Calculate amountToSell in tokenIn decimals
@@ -426,12 +435,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      * @dev Internal: fetches latest price from Chainlink price feed (returns 1e18 USD per token).
      */
     function _getLatestPrice(address priceFeed) internal view returns (uint256) {
-        (
-            ,
-            int256 answer,
-            ,
-            ,
-        ) = AggregatorV3Interface(priceFeed).latestRoundData();
+        (, int256 answer,,,) = AggregatorV3Interface(priceFeed).latestRoundData();
         if (answer <= 0) revert PriceFeedError();
         // Normalize to 1e18
         uint8 decimals = AggregatorV3Interface(priceFeed).decimals();
@@ -444,7 +448,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      */
     function _validatePriceFeed(address priceFeed) internal view {
         try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-            uint80 /*roundId*/, int256 answer, uint256 /*startedAt*/, uint256 updatedAt, uint80 /*answeredInRound*/
+            uint80, /*roundId*/ int256 answer, uint256, /*startedAt*/ uint256 updatedAt, uint80 /*answeredInRound*/
         ) {
             if (answer <= 0) revert InvalidPriceFeedAnswer(priceFeed);
             if (updatedAt == 0) revert InvalidPriceFeedUpdate(priceFeed);

@@ -24,7 +24,7 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
 
     mapping(address => bool) public supportedTokens;
     mapping(address => uint256) public upkeepOf; // vault address => upkeep ID
-    
+
     address public link;
     address public uniswapV3Router;
     IAutomationRegistryMaster2_3 public automationRegistry;
@@ -43,10 +43,13 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @param _automationRegistry Chainlink Automation Registry address
      * @param admin Admin address
      */
-    function initialize(address _link, address _uniswapV3Router, address payable _automationRegistry, address admin) external initializer {
+    function initialize(address _link, address _uniswapV3Router, address payable _automationRegistry, address admin)
+        external
+        initializer
+    {
         __UUPSUpgradeable_init();
         __AccessControl_init();
-        
+
         link = _link;
         uniswapV3Router = _uniswapV3Router;
         automationRegistry = IAutomationRegistryMaster2_3(_automationRegistry);
@@ -80,7 +83,11 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @param amountOutMin Minimum LINK to receive
      * @return amountOut Amount of LINK received
      */
-    function swapToLink(address tokenIn, uint256 amountIn, uint24 fee, uint256 amountOutMin) external onlyRole(SWAPER_ROLE) returns (uint256 amountOut) {
+    function swapToLink(address tokenIn, uint256 amountIn, uint24 fee, uint256 amountOutMin)
+        external
+        onlyRole(SWAPER_ROLE)
+        returns (uint256 amountOut)
+    {
         require(supportedTokens[tokenIn], "Not supported");
         IERC20(tokenIn).approve(uniswapV3Router, amountIn);
         amountOut = ISwapRouter02(uniswapV3Router).exactInputSingle(
@@ -126,36 +133,35 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @param linkAmount Amount of LINK to fund the upkeep
      * @return upkeepId The ID of the registered upkeep
      */
-    function registerAndFundUpkeep(
-        address upkeepContract,
-        bytes calldata checkData,
-        uint32 gasLimit,
-        uint96 linkAmount
-    ) external onlyRole(FACTORY_ROLE) returns (uint256) {
+    function registerAndFundUpkeep(address upkeepContract, bytes calldata checkData, uint32 gasLimit, uint96 linkAmount)
+        external
+        onlyRole(FACTORY_ROLE)
+        returns (uint256)
+    {
         // Ensure we have enough LINK to fund the upkeep
         require(IERC20(link).balanceOf(address(this)) >= linkAmount, "Insufficient LINK balance");
-        
+
         // Register the upkeep with Chainlink Automation Registry
         uint256 upkeepId = automationRegistry.registerUpkeep(
-            upkeepContract,    // target contract
-            gasLimit,          // gas limit for performUpkeep
-            address(this),     // admin (this treasury contract)
-            0,                 // trigger type (0 = conditional)
-            link,              // billing token (LINK)
-            checkData,         // check data
-            "",                // trigger config (empty for conditional)
-            ""                 // offchain config (empty)
+            upkeepContract, // target contract
+            gasLimit, // gas limit for performUpkeep
+            address(this), // admin (this treasury contract)
+            0, // trigger type (0 = conditional)
+            link, // billing token (LINK)
+            checkData, // check data
+            "", // trigger config (empty for conditional)
+            "" // offchain config (empty)
         );
-        
+
         // Add funds to the upkeep
         IERC20(link).approve(address(automationRegistry), linkAmount);
         automationRegistry.addFunds(upkeepId, linkAmount);
-        
+
         // Store the mapping of vault to upkeep ID
         upkeepOf[upkeepContract] = upkeepId;
-        
+
         emit UpkeepRegistered(upkeepContract, upkeepId, linkAmount);
-        
+
         return upkeepId;
     }
 
@@ -171,4 +177,4 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @dev Authorizes contract upgrades. Only ADMIN can upgrade.
      */
     function _authorizeUpgrade(address) internal override onlyRole(ADMIN_ROLE) {}
-} 
+}

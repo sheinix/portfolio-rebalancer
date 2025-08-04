@@ -16,7 +16,7 @@ interface IUniswapV3Pool {
         uint160 sqrtPriceLimitX96,
         bytes calldata data
     ) external returns (int256 amount0, int256 amount1);
-    
+
     function token0() external view returns (address);
     function token1() external view returns (address);
     function fee() external view returns (uint24);
@@ -33,7 +33,6 @@ interface ISwapRouter02 {
         uint256 amountOutMinimum;
         uint160 sqrtPriceLimitX96;
     }
-    
-    function exactInputSingle(ExactInputSingleParams calldata params) 
-        external payable returns (uint256 amountOut);
-} 
+
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
