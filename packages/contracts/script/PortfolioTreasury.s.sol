@@ -25,7 +25,7 @@ contract DeployPortfolioTreasury is Script {
         
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
         address uniswapV4Router = vm.parseJsonAddress(json, ".uniswap.uniswapV4Router");
-        address admin = msg.sender;
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("LINK Token from addressBook:", linkToken);
         console.log("Uniswap V4 Router from addressBook:", uniswapV4Router);
@@ -68,7 +68,7 @@ contract DeployPortfolioTreasury is Script {
         
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
         address uniswapV4Router = vm.parseJsonAddress(json, ".uniswap.uniswapV4Router");
-        address admin = msg.sender;
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("Target Chain ID:", chainId);
         console.log("LINK Token:", linkToken);

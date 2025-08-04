@@ -27,7 +27,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         string memory json = vm.readFile(filename);
         
         address treasuryAddress = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
-        address admin = msg.sender;
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("Treasury address from addressBook:", treasuryAddress);
         console.log("Factory admin:", admin);
@@ -42,7 +42,7 @@ contract DeployPortfolioRebalancerFactory is Script {
      */
     function deployWithTreasury(address treasuryAddress) public returns (address factoryAddress) {
         uint256 chainId = block.chainid;
-        address admin = msg.sender;
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("Deploying with custom treasury address");
         console.log("Treasury address:", treasuryAddress);
@@ -85,7 +85,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         string memory json = vm.readFile(filename);
         
         address treasuryAddress = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
-        address admin = msg.sender;
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
         
         console.log("Target Chain ID:", chainId);
         console.log("Treasury address:", treasuryAddress);
@@ -161,10 +161,9 @@ contract DeployPortfolioRebalancerFactory is Script {
         factory = PortfolioRebalancerFactory(address(factoryProxy));
         console.log("Factory proxy deployed at:", address(factory));
 
-        // 5. Transfer ProxyAdmin ownership to Factory admin
+        // 5. ProxyAdmin ownership is already configured during deployment
         console.log("\n5. Configuring permissions...");
-        proxyAdmin.transferOwnership(admin);
-        console.log("ProxyAdmin ownership transferred to:", admin);
+        console.log("ProxyAdmin ownership configured to:", admin);
 
         // 6. Validate deployment and proxy-implementation linking
         _validateFactoryDeployment(
