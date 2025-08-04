@@ -10,7 +10,6 @@
     "AAVE": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9"
   },
   "chainlink": {
-    "agregatorV3Interface": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
     "priceFeedWETH": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
     "priceFeedAAVE": "0x547a514d5e3769680Ce22B2361c10Ea13619e8a9",
     "priceFeedUSDC": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
