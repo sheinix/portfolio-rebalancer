@@ -243,8 +243,7 @@ contract DeployPortfolioRebalancerFactory is Script {
     /**
      * @dev Validates the factory deployment and proxy-implementation linking
      * @param portfolioImpl Portfolio implementation address
-     * @param factoryImpl Factory implementation address
-     * @param factoryProxy Factory proxy address
+     * @param factoryProxyAddr Factory proxy address
      * @param proxyAdminAddr ProxyAdmin address
      * @param treasuryAddr Treasury address
      * @param expectedAdmin Expected admin address
@@ -252,8 +251,8 @@ contract DeployPortfolioRebalancerFactory is Script {
      */
     function _validateFactoryDeployment(
         address portfolioImpl,
-        address factoryImpl,
-        address factoryProxy,
+        address /* factoryImpl */,
+        address factoryProxyAddr,
         address proxyAdminAddr,
         address treasuryAddr,
         address expectedAdmin,
@@ -262,7 +261,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("\n=== Factory System Deployment Validation ===");
         
         // 1. Validate factory proxy configuration
-        PortfolioRebalancerFactory factoryContract = PortfolioRebalancerFactory(factoryProxy);
+        PortfolioRebalancerFactory factoryContract = PortfolioRebalancerFactory(factoryProxyAddr);
         
         // 2. Validate factory settings
         require(factoryContract.implementation() == portfolioImpl, "Portfolio implementation mismatch");

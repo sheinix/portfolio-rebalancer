@@ -162,14 +162,13 @@ contract DeployPortfolioTreasury is Script {
 
     /**
      * @dev Validates the treasury deployment and proxy-implementation linking
-     * @param implementation Treasury implementation address
      * @param proxy Treasury proxy address
      * @param expectedLink Expected LINK token address
      * @param expectedRouter Expected Uniswap V4 router address
      * @param expectedAdmin Expected admin address
      */
     function _validateTreasuryDeployment(
-        address implementation,
+        address /* implementation */,
         address proxy,
         address expectedLink,
         address expectedRouter,
@@ -178,13 +177,13 @@ contract DeployPortfolioTreasury is Script {
         console.log("\n=== Treasury Deployment Validation ===");
         
         // 1. Validate proxy points to correct implementation
-        PortfolioTreasury treasuryProxy = PortfolioTreasury(proxy);
+        PortfolioTreasury treasuryContract = PortfolioTreasury(proxy);
         
         // 2. Validate initialization parameters
-        require(treasuryProxy.link() == expectedLink, "LINK token mismatch");
-        require(treasuryProxy.uniswapV4Router() == expectedRouter, "Uniswap router mismatch");
-        require(treasuryProxy.hasRole(treasuryProxy.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Admin role not granted");
-        require(treasuryProxy.hasRole(treasuryProxy.ADMIN_ROLE(), expectedAdmin), "ADMIN_ROLE not granted");
+        require(treasuryContract.link() == expectedLink, "LINK token mismatch");
+        require(treasuryContract.uniswapV4Router() == expectedRouter, "Uniswap router mismatch");
+        require(treasuryContract.hasRole(treasuryContract.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Admin role not granted");
+        require(treasuryContract.hasRole(treasuryContract.ADMIN_ROLE(), expectedAdmin), "ADMIN_ROLE not granted");
         
         console.log("PASS: Proxy -> Implementation: LINKED");
         console.log("PASS: LINK Token:", expectedLink);
