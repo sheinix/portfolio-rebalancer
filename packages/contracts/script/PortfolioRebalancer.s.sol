@@ -96,7 +96,7 @@ contract DeployPortfolioRebalancer is Script {
         // Read automation registry from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".automationRegistry");
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
@@ -142,7 +142,7 @@ contract DeployPortfolioRebalancer is Script {
         // Read automation registry from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".automationRegistry");
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
