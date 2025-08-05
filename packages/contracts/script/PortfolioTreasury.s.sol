@@ -38,12 +38,12 @@ contract DeployPortfolioTreasury is Script {
     /**
      * @notice Deploy treasury with custom parameters (override addressBook)
      * @param linkToken LINK token address
-     * @param uniswapV4Router Uniswap V4 router address
+     * @param uniswapV3Router Uniswap V3 router address
      * @param automationRegistry Chainlink Automation Registry address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
      */
-    function deployWithParams(address linkToken, address uniswapV4Router, address automationRegistry, address admin)
+    function deployWithParams(address linkToken, address uniswapV3Router, address automationRegistry, address admin)
         public
         returns (address treasuryAddress)
     {
@@ -51,11 +51,11 @@ contract DeployPortfolioTreasury is Script {
 
         console.log("Deploying with custom parameters (bypassing addressBook)");
         console.log("LINK Token:", linkToken);
-        console.log("Uniswap V4 Router:", uniswapV4Router);
+        console.log("Uniswap V3 Router:", uniswapV3Router);
         console.log("Automation Registry:", automationRegistry);
         console.log("Admin:", admin);
 
-        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, automationRegistry, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
     }
 
     /**
@@ -70,23 +70,23 @@ contract DeployPortfolioTreasury is Script {
         string memory json = vm.readFile(filename);
 
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
-        address uniswapV4Router = vm.parseJsonAddress(json, ".uniswap.uniswapV4Router");
+        address uniswapV3Router = vm.parseJsonAddress(json, ".uniswap.router");
         address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
         address admin = tx.origin; // Use actual deployer EOA, not script contract
 
         console.log("Target Chain ID:", chainId);
         console.log("LINK Token:", linkToken);
-        console.log("Uniswap V4 Router:", uniswapV4Router);
+        console.log("Uniswap V3 Router:", uniswapV3Router);
         console.log("Automation Registry:", automationRegistry);
 
-        return _deployTreasuryCore(chainId, linkToken, uniswapV4Router, automationRegistry, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
     }
 
     /**
      * @dev Core deployment logic shared by all deployment functions
      * @param chainId Chain ID for addressBook updates
      * @param linkToken LINK token address
-     * @param uniswapV4Router Uniswap V4 router address
+     * @param uniswapV3Router Uniswap V3 router address
      * @param automationRegistry Chainlink Automation Registry address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
@@ -94,7 +94,7 @@ contract DeployPortfolioTreasury is Script {
     function _deployTreasuryCore(
         uint256 chainId,
         address linkToken,
-        address uniswapV4Router,
+        address uniswapV3Router,
         address automationRegistry,
         address admin
     ) internal returns (address treasuryAddress) {
@@ -110,7 +110,7 @@ contract DeployPortfolioTreasury is Script {
 
         // 2. Prepare initialization data
         bytes memory treasuryData = abi.encodeWithSelector(
-            PortfolioTreasury.initialize.selector, linkToken, uniswapV4Router, payable(automationRegistry), admin
+            PortfolioTreasury.initialize.selector, linkToken, uniswapV3Router, payable(automationRegistry), admin
         );
 
         // 3. Deploy Treasury as UUPS proxy
@@ -120,7 +120,7 @@ contract DeployPortfolioTreasury is Script {
 
         // 4. Validate deployment and proxy-implementation linking
         _validateTreasuryDeployment(
-            address(treasuryImplementation), address(treasury), linkToken, uniswapV4Router, admin
+            address(treasuryImplementation), address(treasury), linkToken, uniswapV3Router, admin
         );
 
         // 5. Update addressBook with deployed addresses
@@ -133,7 +133,7 @@ contract DeployPortfolioTreasury is Script {
         console.log("3. Treasury Proxy:", address(treasury));
         console.log("4. Admin:", admin);
         console.log("5. LINK Token:", linkToken);
-        console.log("6. Uniswap V4 Router:", uniswapV4Router);
+        console.log("6. Uniswap V3 Router:", uniswapV3Router);
         console.log("7. Proxy -> Implementation Link: VALIDATED");
         console.log("8. AddressBook updated");
 
@@ -170,7 +170,7 @@ contract DeployPortfolioTreasury is Script {
      * @dev Validates the treasury deployment and proxy-implementation linking
      * @param proxy Treasury proxy address
      * @param expectedLink Expected LINK token address
-     * @param expectedRouter Expected Uniswap V4 router address
+     * @param expectedRouter Expected Uniswap V3 router address
      * @param expectedAdmin Expected admin address
      */
     function _validateTreasuryDeployment(

@@ -2,12 +2,13 @@
 pragma solidity ^0.8.19;
 
 import "../../src/PortfolioRebalancer.sol";
+import "../../src/libraries/PortfolioLogicLibrary.sol";
 
 /// This contract is used to test the PortfolioRebalancer.sol contract
 /// @dev Do not deploy this contract, it is only used for testing
 contract PortfolioRebalancerTestable is PortfolioRebalancer {
     function test_exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) external pure returns (bool) {
-        return _exceedsDeviation(pct, target, threshold);
+        return PortfolioLogicLibrary.exceedsDeviation(pct, target, threshold);
     }
 
     function test_sortDescending(TokenDelta[] memory arr, uint256 count) external pure returns (TokenDelta[] memory) {
@@ -15,7 +16,7 @@ contract PortfolioRebalancerTestable is PortfolioRebalancer {
         if (count > arr.length) {
             count = arr.length;
         }
-        _sortDescending(arr, count);
+        PortfolioLogicLibrary.sortDescending(arr, count);
         return arr;
     }
 

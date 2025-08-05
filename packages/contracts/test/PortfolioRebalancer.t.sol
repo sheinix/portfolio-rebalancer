@@ -4,6 +4,8 @@ pragma solidity ^0.8.19;
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/PortfolioRebalancer.sol";
+import "../src/libraries/ValidationLibrary.sol";
+import "../src/libraries/PortfolioLogicLibrary.sol";
 import "./mock/MockERC20.sol";
 import "./mock/PortfolioRebalancerTestable.sol";
 
@@ -99,7 +101,7 @@ contract PortfolioRebalancerTest is Test {
     }
 
     function _setupInitializedContract() internal {
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     // --- initialize Validation Tests ---
@@ -119,7 +121,7 @@ contract PortfolioRebalancerTest is Test {
         }
 
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     function test_initialize_Revert_AllocationSumMismatch() public {
@@ -135,7 +137,7 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 400_000; // sum != 1e6
 
         vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ZeroAddress() public {
@@ -150,13 +152,13 @@ contract PortfolioRebalancerTest is Test {
         a[0] = 500_000;
         a[1] = 500_000;
 
-        vm.expectRevert(PortfolioRebalancer.ZeroAddress.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
+        vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     function test_initialize_Success() public {
         // Test successful initialization
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
 
         // Verify the basket was set correctly
         (address token, address priceFeed, uint256 targetAllocation) = rebalancer.basket(0);
@@ -176,7 +178,7 @@ contract PortfolioRebalancerTest is Test {
         uint256[] memory emptyAllocs = new uint256[](0);
 
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ArrayLengthMismatch() public {
@@ -192,29 +194,35 @@ contract PortfolioRebalancerTest is Test {
         a[0] = 500_000;
         a[1] = 500_000;
 
-        vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury);
+        vm.expectRevert(ValidationLibrary.ArrayLengthMismatch.selector);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ZeroTreasury() public {
         // Try to initialize with zero treasury address
-        vm.expectRevert(PortfolioRebalancer.ZeroTreasury.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, address(0));
+        vm.expectRevert(ValidationLibrary.ZeroTreasury.selector);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, address(0), owner);
     }
 
     function test_initialize_Revert_ZeroFactory() public {
         // Try to initialize with zero factory address
-        vm.expectRevert(PortfolioRebalancer.ZeroFactory.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, address(0), 10, treasury);
+        vm.expectRevert(ValidationLibrary.ZeroFactory.selector);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, address(0), 10, treasury, owner);
+    }
+
+    function test_initialize_Revert_ZeroOwner() public {
+        // Try to initialize with zero owner address
+        vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, address(0));
     }
 
     function test_initialize_Revert_DoubleInitialization() public {
         // Initialize once successfully
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
 
         // Try to initialize again (should revert due to initializer modifier)
         vm.expectRevert();
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
     }
 
     // --- setBasket Validation Tests ---
@@ -234,6 +242,7 @@ contract PortfolioRebalancerTest is Test {
             }
         }
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
         rebalancer.setBasket(tooMany, feeds, allocs);
     }
@@ -249,7 +258,8 @@ contract PortfolioRebalancerTest is Test {
             abi.encode(address(0)) // Return address(0) to simulate no pool
         );
 
-        vm.expectRevert(PortfolioRebalancer.NoPoolForToken.selector);
+        vm.prank(owner);
+        vm.expectRevert(ValidationLibrary.NoPoolForToken.selector);
         rebalancer.setBasket(tokenAddrs, priceFeeds, allocations);
     }
 
@@ -266,6 +276,7 @@ contract PortfolioRebalancerTest is Test {
         a[0] = 500_000;
         a[1] = 400_000; // sum != 1e6
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
         rebalancer.setBasket(t, f, a);
     }
@@ -283,7 +294,8 @@ contract PortfolioRebalancerTest is Test {
         a[0] = 500_000;
         a[1] = 500_000;
 
-        vm.expectRevert(PortfolioRebalancer.ZeroAddress.selector);
+        vm.prank(owner);
+        vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
         rebalancer.setBasket(t, f, a);
     }
 
@@ -294,6 +306,7 @@ contract PortfolioRebalancerTest is Test {
         address[] memory emptyFeeds = new address[](0);
         uint256[] memory emptyAllocs = new uint256[](0);
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
         rebalancer.setBasket(emptyTokens, emptyFeeds, emptyAllocs);
     }
@@ -312,7 +325,8 @@ contract PortfolioRebalancerTest is Test {
         a[0] = 500_000;
         a[1] = 500_000;
 
-        vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
+        vm.prank(owner);
+        vm.expectRevert(ValidationLibrary.ArrayLengthMismatch.selector);
         rebalancer.setBasket(t, f, a);
     }
 
@@ -329,6 +343,8 @@ contract PortfolioRebalancerTest is Test {
         newAllocs[0] = 600_000;
         newAllocs[1] = 400_000;
 
+        // Call as owner
+        vm.prank(owner);
         // Record logs to check if BasketUpdated event was emitted
         vm.recordLogs();
 
@@ -362,6 +378,7 @@ contract PortfolioRebalancerTest is Test {
         // Record logs to check if RebalanceThresholdUpdated event was emitted
         vm.recordLogs();
 
+        vm.prank(owner);
         rebalancer.setRebalanceThreshold(newThreshold);
 
         // Verify the threshold was updated correctly
@@ -399,6 +416,7 @@ contract PortfolioRebalancerTest is Test {
         // Record logs to check if AutomationToggled event was emitted
         vm.recordLogs();
 
+        vm.prank(owner);
         rebalancer.setAutomationEnabled(false);
 
         // Verify the automation was disabled
@@ -418,12 +436,14 @@ contract PortfolioRebalancerTest is Test {
         _setupInitializedContract();
 
         // First disable automation
+        vm.prank(owner);
         rebalancer.setAutomationEnabled(false);
         assertFalse(rebalancer.automationEnabled());
 
         // Record logs to check if AutomationToggled event was emitted
         vm.recordLogs();
 
+        vm.prank(owner);
         rebalancer.setAutomationEnabled(true);
 
         // Verify the automation was enabled
@@ -457,8 +477,9 @@ contract PortfolioRebalancerTest is Test {
         uint256 depositAmount = 1000 ether;
 
         // Give owner some tokens to deposit
-        nonWhitelistedToken.transfer(address(this), depositAmount);
+        nonWhitelistedToken.transfer(owner, depositAmount);
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.NotWhitelisted.selector);
         rebalancer.deposit(address(nonWhitelistedToken), depositAmount, false);
     }
@@ -466,6 +487,7 @@ contract PortfolioRebalancerTest is Test {
     function test_deposit_Revert_InvalidAmount() public {
         _setupInitializedContract();
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.InvalidAmount.selector);
         rebalancer.deposit(address(tokens[0]), 0, false);
     }
@@ -487,19 +509,22 @@ contract PortfolioRebalancerTest is Test {
         uint256 depositAmount = 1000 ether;
         address depositToken = address(tokens[0]);
         uint256 initialContractBalance = IERC20(depositToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(address(this), depositToken);
+        uint256 initialUserBalance = rebalancer.userBalances(owner, depositToken);
 
-        // Give ourselves some tokens to deposit
-        tokens[0].transfer(address(this), depositAmount);
+        // Give owner some tokens to deposit
+        tokens[0].transfer(owner, depositAmount);
+        
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
 
         // Record logs to check if Deposit event was emitted
         vm.recordLogs();
 
         rebalancer.deposit(depositToken, depositAmount, false);
+        vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(address(this), depositToken), initialUserBalance + depositAmount);
+        assertEq(rebalancer.userBalances(owner, depositToken), initialUserBalance + depositAmount);
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
 
         // Check swap approval was set (should be max uint256)
@@ -515,7 +540,7 @@ contract PortfolioRebalancerTest is Test {
             if (logs[i].topics[0] == keccak256("Deposit(address,address,uint256)")) {
                 depositEventFound = true;
                 // Verify indexed parameters (user and token)
-                assertEq(logs[i].topics[1], bytes32(uint256(uint160(address(this))))); // user
+                assertEq(logs[i].topics[1], bytes32(uint256(uint160(owner)))); // user
                 assertEq(logs[i].topics[2], bytes32(uint256(uint160(depositToken)))); // token
                 // Decode and verify the event data (amount parameter)
                 uint256 emittedAmount = abi.decode(logs[i].data, (uint256));
@@ -532,19 +557,22 @@ contract PortfolioRebalancerTest is Test {
         uint256 depositAmount = 1000 ether;
         address depositToken = address(tokens[0]);
         uint256 initialContractBalance = IERC20(depositToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(address(this), depositToken);
+        uint256 initialUserBalance = rebalancer.userBalances(owner, depositToken);
 
-        // Give ourselves some tokens to deposit
-        tokens[0].transfer(address(this), depositAmount);
+        // Give owner some tokens to deposit
+        tokens[0].transfer(owner, depositAmount);
+        
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
 
         // Record logs to check if Deposit event was emitted
         vm.recordLogs();
 
         rebalancer.deposit(depositToken, depositAmount, true);
+        vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(address(this), depositToken), initialUserBalance + depositAmount);
+        assertEq(rebalancer.userBalances(owner, depositToken), initialUserBalance + depositAmount);
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
 
         // Check swap approval was set (should be max uint256)
@@ -560,7 +588,7 @@ contract PortfolioRebalancerTest is Test {
             if (logs[i].topics[0] == keccak256("Deposit(address,address,uint256)")) {
                 depositEventFound = true;
                 // Verify indexed parameters (user and token)
-                assertEq(logs[i].topics[1], bytes32(uint256(uint160(address(this))))); // user
+                assertEq(logs[i].topics[1], bytes32(uint256(uint160(owner)))); // user
                 assertEq(logs[i].topics[2], bytes32(uint256(uint160(depositToken)))); // token
                 // Decode and verify the event data (amount parameter)
                 uint256 emittedAmount = abi.decode(logs[i].data, (uint256));
@@ -578,7 +606,8 @@ contract PortfolioRebalancerTest is Test {
         address depositToken = address(tokens[0]);
 
         // Give ourselves some tokens to deposit
-        tokens[0].transfer(address(this), depositAmount * 2);
+        tokens[0].transfer(owner, depositAmount * 2);
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount * 2);
 
         // First deposit
@@ -588,11 +617,12 @@ contract PortfolioRebalancerTest is Test {
 
         // Second deposit - allowance should still be max (not reset)
         rebalancer.deposit(depositToken, depositAmount, false);
+        vm.stopPrank();
         uint256 allowanceAfterSecond = IERC20(depositToken).allowance(address(rebalancer), uniswapV3Factory);
         assertEq(allowanceAfterSecond, type(uint256).max);
 
         // Verify total user balance
-        assertEq(rebalancer.userBalances(address(this), depositToken), depositAmount * 2);
+        assertEq(rebalancer.userBalances(owner, depositToken), depositAmount * 2);
     }
 
     // --- withdraw Validation Tests ---
@@ -603,6 +633,7 @@ contract PortfolioRebalancerTest is Test {
         MockERC20 nonWhitelistedToken = new MockERC20("NonWhitelisted", "NWL", 18, 1_000_000 ether);
         uint256 withdrawAmount = 1000 ether;
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.NotWhitelisted.selector);
         rebalancer.withdraw(address(nonWhitelistedToken), withdrawAmount, false);
     }
@@ -610,6 +641,7 @@ contract PortfolioRebalancerTest is Test {
     function test_withdraw_Revert_InvalidAmount() public {
         _setupInitializedContract();
 
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.InvalidAmount.selector);
         rebalancer.withdraw(address(tokens[0]), 0, false);
     }
@@ -632,6 +664,7 @@ contract PortfolioRebalancerTest is Test {
         address withdrawToken = address(tokens[0]);
 
         // Try to withdraw without having any balance
+        vm.prank(owner);
         vm.expectRevert(PortfolioRebalancer.NotEnoughBalance.selector);
         rebalancer.withdraw(withdrawToken, withdrawAmount, false);
     }
@@ -644,13 +677,16 @@ contract PortfolioRebalancerTest is Test {
         address token = address(tokens[0]);
 
         // First deposit some tokens
-        tokens[0].transfer(address(this), depositAmount);
+        tokens[0].transfer(owner, depositAmount);
+        
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(token, depositAmount, false);
 
         // Try to withdraw more than deposited
         vm.expectRevert(PortfolioRebalancer.NotEnoughBalance.selector);
         rebalancer.withdraw(token, withdrawAmount, false);
+        vm.stopPrank();
     }
 
     function test_withdraw_Success_NoAutoRebalance() public {
@@ -661,24 +697,27 @@ contract PortfolioRebalancerTest is Test {
         address withdrawToken = address(tokens[0]);
 
         // First deposit some tokens
-        tokens[0].transfer(address(this), depositAmount);
+        tokens[0].transfer(owner, depositAmount);
+        
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
 
         // Get initial balances
         uint256 initialContractBalance = IERC20(withdrawToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(address(this), withdrawToken);
-        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(address(this));
+        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
+        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(owner);
 
         // Record logs to check if Withdraw event was emitted
         vm.recordLogs();
 
         rebalancer.withdraw(withdrawToken, withdrawAmount, false);
+        vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(address(this), withdrawToken), initialUserBalance - withdrawAmount);
+        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - withdrawAmount);
-        assertEq(IERC20(withdrawToken).balanceOf(address(this)), initialOwnerBalance + withdrawAmount);
+        assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + withdrawAmount);
 
         // Check that events were emitted
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -690,7 +729,7 @@ contract PortfolioRebalancerTest is Test {
             if (logs[i].topics[0] == keccak256("Withdraw(address,address,uint256)")) {
                 withdrawEventFound = true;
                 // Verify indexed parameters (user and token)
-                assertEq(logs[i].topics[1], bytes32(uint256(uint160(address(this))))); // user
+                assertEq(logs[i].topics[1], bytes32(uint256(uint160(owner)))); // user
                 assertEq(logs[i].topics[2], bytes32(uint256(uint160(withdrawToken)))); // token
                 // Decode and verify the event data (amount parameter)
                 uint256 emittedAmount = abi.decode(logs[i].data, (uint256));
@@ -709,24 +748,27 @@ contract PortfolioRebalancerTest is Test {
         address withdrawToken = address(tokens[0]);
 
         // First deposit some tokens
-        tokens[0].transfer(address(this), depositAmount);
+        tokens[0].transfer(owner, depositAmount);
+        
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
 
         // Get initial balances
         uint256 initialContractBalance = IERC20(withdrawToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(address(this), withdrawToken);
-        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(address(this));
+        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
+        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(owner);
 
         // Record logs to check if Withdraw event was emitted
         vm.recordLogs();
 
         rebalancer.withdraw(withdrawToken, withdrawAmount, true);
+        vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(address(this), withdrawToken), initialUserBalance - withdrawAmount);
+        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - withdrawAmount);
-        assertEq(IERC20(withdrawToken).balanceOf(address(this)), initialOwnerBalance + withdrawAmount);
+        assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + withdrawAmount);
 
         // Check that events were emitted (Withdraw + potentially Rebalanced and SwapPlanned/SwapExecuted)
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -738,7 +780,7 @@ contract PortfolioRebalancerTest is Test {
             if (logs[i].topics[0] == keccak256("Withdraw(address,address,uint256)")) {
                 withdrawEventFound = true;
                 // Verify indexed parameters (user and token)
-                assertEq(logs[i].topics[1], bytes32(uint256(uint160(address(this))))); // user
+                assertEq(logs[i].topics[1], bytes32(uint256(uint160(owner)))); // user
                 assertEq(logs[i].topics[2], bytes32(uint256(uint160(withdrawToken)))); // token
                 // Decode and verify the event data (amount parameter)
                 uint256 emittedAmount = abi.decode(logs[i].data, (uint256));
@@ -756,21 +798,23 @@ contract PortfolioRebalancerTest is Test {
         address withdrawToken = address(tokens[0]);
 
         // First deposit some tokens
-        tokens[0].transfer(address(this), depositAmount);
+        tokens[0].transfer(owner, depositAmount);
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
 
         // Get initial balances
         uint256 initialContractBalance = IERC20(withdrawToken).balanceOf(address(rebalancer));
-        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(address(this));
+        uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(owner);
 
         // Withdraw all tokens
         rebalancer.withdraw(withdrawToken, depositAmount, false);
+        vm.stopPrank();
 
         // Verify complete withdrawal
-        assertEq(rebalancer.userBalances(address(this), withdrawToken), 0);
+        assertEq(rebalancer.userBalances(owner, withdrawToken), 0);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - depositAmount);
-        assertEq(IERC20(withdrawToken).balanceOf(address(this)), initialOwnerBalance + depositAmount);
+        assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + depositAmount);
     }
 
     function test_withdraw_Multiple_PartialWithdrawals() public {
@@ -782,25 +826,24 @@ contract PortfolioRebalancerTest is Test {
         address withdrawToken = address(tokens[0]);
 
         // First deposit some tokens
-        tokens[0].transfer(address(this), depositAmount);
+        tokens[0].transfer(owner, depositAmount);
+        vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
 
-        uint256 initialUserBalance = rebalancer.userBalances(address(this), withdrawToken);
+        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
 
         // First withdrawal
         rebalancer.withdraw(withdrawToken, firstWithdraw, false);
-        assertEq(rebalancer.userBalances(address(this), withdrawToken), initialUserBalance - firstWithdraw);
+        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - firstWithdraw);
 
         // Second withdrawal
         rebalancer.withdraw(withdrawToken, secondWithdraw, false);
-        assertEq(
-            rebalancer.userBalances(address(this), withdrawToken), initialUserBalance - firstWithdraw - secondWithdraw
-        );
+        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - firstWithdraw - secondWithdraw);
 
         // Verify remaining balance
         uint256 expectedRemaining = depositAmount - firstWithdraw - secondWithdraw;
-        assertEq(rebalancer.userBalances(address(this), withdrawToken), expectedRemaining);
+        assertEq(rebalancer.userBalances(owner, withdrawToken), expectedRemaining);
     }
     // --- Internal Function Tests ---
     // Using PortfolioRebalancerTestable to test internal functions:
@@ -847,7 +890,7 @@ contract PortfolioRebalancerTest is Test {
 
     function test_computeDeltaUsd() public {
         PortfolioRebalancerTestable testable = new PortfolioRebalancerTestable();
-        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury);
+        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
 
         // Setup test data: 6 tokens (matching the basket) with specific balances and prices
         uint256[] memory balances = new uint256[](6);

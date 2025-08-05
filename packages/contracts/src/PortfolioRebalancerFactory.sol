@@ -80,7 +80,7 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
-     * @param uniswapV4Factory Uniswap V4 factory address.
+     * @param uniswapV3Factory Uniswap V3 factory address.
      * @param gasLimit Gas limit for automation performUpkeep calls.
      * @param linkAmount Amount of LINK to fund the automation upkeep.
      * @return proxy The address of the new proxy vault.
@@ -90,7 +90,7 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 rebalanceThreshold,
-        address uniswapV4Factory,
+        address uniswapV3Factory,
         uint32 gasLimit,
         uint96 linkAmount
     ) external returns (address proxy) {
@@ -100,9 +100,10 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
             priceFeeds,
             allocations,
             rebalanceThreshold,
-            uniswapV4Factory,
+            uniswapV3Factory,
             feeBps,
-            treasury
+            treasury,
+            msg.sender
         );
         proxy = address(new TransparentUpgradeableProxy(implementation, address(proxyAdmin), data));
 

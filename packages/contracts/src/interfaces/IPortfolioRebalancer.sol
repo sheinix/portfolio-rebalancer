@@ -9,6 +9,7 @@ interface IPortfolioRebalancer {
         uint256 rebalanceThreshold,
         address uniswapV3Factory,
         uint256 feeBps,
-        address treasury
+        address treasury,
+        address owner
     ) external;
 }

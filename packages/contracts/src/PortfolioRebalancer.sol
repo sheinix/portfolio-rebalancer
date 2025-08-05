@@ -10,17 +10,9 @@ import "solmate/utils/FixedPointMathLib.sol";
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/automation/AutomationCompatible.sol";
 import "./interfaces/IUniswapV3.sol";
-
-struct PortfolioSnapshot {
-    uint256[] balances;
-    uint256[] prices;
-    uint256 totalUSD;
-}
-
-struct TokenDelta {
-    uint256 index;
-    int256 usd;
-}
+import "./libraries/ValidationLibrary.sol";
+import "./libraries/PortfolioLogicLibrary.sol";
+import "./libraries/PortfolioStructs.sol";
 
 event SwapExecuted(
     address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut
@@ -41,6 +33,9 @@ contract PortfolioRebalancer is
 {
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
+    using ValidationLibrary for address;
+    using ValidationLibrary for address[];
+    using PortfolioLogicLibrary for TokenInfo[];
 
     // Uniswap V3 factory address (set at initialization)
     address public uniswapV3Factory;
@@ -51,13 +46,6 @@ contract PortfolioRebalancer is
     // Constants
     uint256 public constant MAX_TOKENS = 6;
     uint256 public constant ALLOCATION_SCALE = 1e6; // 100% = 1,000,000
-
-    // Storage
-    struct TokenInfo {
-        address token;
-        address priceFeed; // Chainlink AggregatorV3Interface
-        uint256 targetAllocation; // scaled by ALLOCATION_SCALE
-    }
 
     // List of basket tokens
     TokenInfo[] public basket;
@@ -95,17 +83,8 @@ contract PortfolioRebalancer is
     error NotUser();
     error AllocationSumMismatch();
     error ExceedsMaxTokens();
-    error ZeroAddress();
-    error ZeroTreasury();
-    error ZeroFactory();
     error NotEnoughBalance();
-    error PriceFeedError();
     error NoRebalanceNeeded();
-    error NoPoolForToken();
-    error NoLiquidityForToken();
-    error InvalidPriceFeedCall(address feed);
-    error InvalidPriceFeedAnswer(address feed);
-    error InvalidPriceFeedUpdate(address feed);
 
     // Initializer
     /**
@@ -117,6 +96,7 @@ contract PortfolioRebalancer is
      * @param _uniswapV3Factory Uniswap V3 factory address.
      * @param _feeBps Fee in basis points (e.g., 10 = 0.1%). Immutable after initialization.
      * @param _treasury Treasury address for fee collection. Immutable after initialization.
+     * @param _owner The owner of this vault (usually the user who called createVault).
      */
     function initialize(
         address[] calldata tokens,
@@ -125,12 +105,14 @@ contract PortfolioRebalancer is
         uint256 _rebalanceThreshold,
         address _uniswapV3Factory,
         uint256 _feeBps,
-        address _treasury
+        address _treasury,
+        address _owner
     ) external initializer {
-        if (_treasury == address(0)) revert ZeroTreasury();
-        if (_uniswapV3Factory == address(0)) revert ZeroFactory();
+        _treasury.validateTreasury();
+        _uniswapV3Factory.validateFactory();
+        _owner.validateNonZeroAddress();
 
-        __Ownable_init(msg.sender);
+        __Ownable_init(_owner);
         __ReentrancyGuard_init();
         uniswapV3Factory = _uniswapV3Factory;
         _setBasket(tokens, priceFeeds, allocations);
@@ -159,13 +141,25 @@ contract PortfolioRebalancer is
     {
         uint256 len = tokens.length;
         if (len == 0 || len > MAX_TOKENS) revert ExceedsMaxTokens();
-        if (len != priceFeeds.length || len != allocations.length) revert AllocationSumMismatch();
+        ValidationLibrary.validateArrayLengths(len, priceFeeds.length, allocations.length);
         uint256 sum;
         _clearBasketAndWhitelist();
-        _checkUniswapV3Pools(tokens);
+        
+        // Validate tokens, price feeds, and pools - get pool addresses
+        tokens.validateNonZeroAddresses();
+        priceFeeds.validatePriceFeeds();
+        address[][] memory poolAddresses = ValidationLibrary.validateAndGetUniswapV3Pools(tokens, uniswapV3Factory, DEFAULT_FEE);
+        
+        // Cache pool addresses for all token pairs
         for (uint256 i = 0; i < len; i++) {
-            if (tokens[i] == address(0) || priceFeeds[i] == address(0)) revert ZeroAddress();
-            _validatePriceFeed(priceFeeds[i]);
+            for (uint256 j = 0; j < len; j++) {
+                if (i != j && poolAddresses[i][j] != address(0)) {
+                    swapPools[tokens[i]][tokens[j]] = poolAddresses[i][j];
+                }
+            }
+        }
+        
+        for (uint256 i = 0; i < len; i++) {
             basket.push(TokenInfo({token: tokens[i], priceFeed: priceFeeds[i], targetAllocation: allocations[i]}));
             tokenIndex[tokens[i]] = i;
             isWhitelisted[tokens[i]] = true;
@@ -291,31 +285,23 @@ contract PortfolioRebalancer is
     }
 
     /**
+     * @dev Helper function to extract user balances into an array
+     */
+    function _getUserBalancesArray(address user) internal view returns (uint256[] memory balances) {
+        uint256 len = basket.length;
+        balances = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            balances[i] = userBalances[user][basket[i].token];
+        }
+    }
+
+    /**
      * @dev Checks if user's portfolio deviates from target allocations beyond threshold.
      *      Returns (needsRebalance, snapshot) for efficient reuse.
      */
     function _needsRebalance(address user) internal view returns (bool, PortfolioSnapshot memory) {
-        uint256 len = basket.length;
-        uint256[] memory balances = new uint256[](len);
-        uint256[] memory prices = new uint256[](len);
-        uint256 totalUSD = 0;
-        bool needs = false;
-        for (uint256 i = 0; i < len; i++) {
-            address token = basket[i].token;
-            balances[i] = userBalances[user][token];
-            prices[i] = _getLatestPrice(basket[i].priceFeed);
-            totalUSD += balances[i].mulWadDown(prices[i]);
-        }
-        for (uint256 i = 0; i < len; i++) {
-            uint256 value = balances[i].mulWadDown(prices[i]);
-            uint256 pct = value == 0 ? 0 : value.divWadDown(totalUSD);
-            uint256 target = basket[i].targetAllocation;
-            if (_exceedsDeviation(pct, target, rebalanceThreshold)) {
-                needs = true;
-                break;
-            }
-        }
-        return (needs, PortfolioSnapshot(balances, prices, totalUSD));
+        uint256[] memory balances = _getUserBalancesArray(user);
+        return PortfolioLogicLibrary.needsRebalance(basket, balances, rebalanceThreshold);
     }
 
     /**
@@ -326,14 +312,7 @@ contract PortfolioRebalancer is
         view
         returns (int256[] memory)
     {
-        uint256 len = basket.length;
-        int256[] memory deltas = new int256[](len);
-        for (uint256 i = 0; i < len; i++) {
-            uint256 currentUsd = balances[i].mulWadDown(prices[i]);
-            uint256 targetUsd = (totalUSD * basket[i].targetAllocation) / ALLOCATION_SCALE;
-            deltas[i] = int256(currentUsd) - int256(targetUsd);
-        }
-        return deltas;
+        return PortfolioLogicLibrary.computeDeltaUsd(basket, balances, prices, totalUSD);
     }
 
     /**
@@ -360,8 +339,8 @@ contract PortfolioRebalancer is
             }
         }
         // Sort sellers and buyers by usd descending (simple selection sort, fine for small N)
-        _sortDescending(sellers, sellerCount);
-        _sortDescending(buyers, buyerCount);
+        PortfolioLogicLibrary.sortDescending(sellers, sellerCount);
+        PortfolioLogicLibrary.sortDescending(buyers, buyerCount);
 
         uint256 s = 0;
         uint256 b = 0;
@@ -399,63 +378,19 @@ contract PortfolioRebalancer is
         emit Rebalanced(user);
     }
 
-    /**
-     * @dev Sorts TokenDelta array in-place by usd descending, up to count elements.
-     */
-    function _sortDescending(TokenDelta[] memory arr, uint256 count) internal pure {
-        for (uint256 i = 0; i < count; i++) {
-            uint256 maxIdx = i;
-            for (uint256 j = i + 1; j < count; j++) {
-                if (arr[j].usd > arr[maxIdx].usd) {
-                    maxIdx = j;
-                }
-            }
-            if (maxIdx != i) {
-                TokenDelta memory tmp = arr[i];
-                arr[i] = arr[maxIdx];
-                arr[maxIdx] = tmp;
-            }
-        }
-    }
+
 
     /**
      * @dev Internal: returns the total USD value of a user's portfolio.
      */
     function _portfolioValueUSD(address user) internal view returns (uint256 total) {
-        for (uint256 i = 0; i < basket.length; i++) {
-            TokenInfo storage info = basket[i];
-            uint256 bal = userBalances[user][info.token];
-            if (bal == 0) continue;
-            uint256 price = _getLatestPrice(info.priceFeed);
-            total += bal.mulWadDown(price);
-        }
+        uint256[] memory balances = _getUserBalancesArray(user);
+        return PortfolioLogicLibrary.portfolioValueUSD(basket, balances);
     }
 
-    /**
-     * @dev Internal: fetches latest price from Chainlink price feed (returns 1e18 USD per token).
-     */
-    function _getLatestPrice(address priceFeed) internal view returns (uint256) {
-        (, int256 answer,,,) = AggregatorV3Interface(priceFeed).latestRoundData();
-        if (answer <= 0) revert PriceFeedError();
-        // Normalize to 1e18
-        uint8 decimals = AggregatorV3Interface(priceFeed).decimals();
-        return uint256(answer) * (10 ** (18 - decimals));
-    }
 
-    /**
-     * @dev Validates that a price feed is a working Chainlink AggregatorV3Interface.
-     *      Reverts with custom errors if the feed is invalid.
-     */
-    function _validatePriceFeed(address priceFeed) internal view {
-        try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-            uint80, /*roundId*/ int256 answer, uint256, /*startedAt*/ uint256 updatedAt, uint80 /*answeredInRound*/
-        ) {
-            if (answer <= 0) revert InvalidPriceFeedAnswer(priceFeed);
-            if (updatedAt == 0) revert InvalidPriceFeedUpdate(priceFeed);
-        } catch {
-            revert InvalidPriceFeedCall(priceFeed);
-        }
-    }
+
+
 
     /**
      * @dev Ensures the contract has infinite approval for the token to the Uniswap V3 factory (or router/pool as needed).
@@ -468,32 +403,9 @@ contract PortfolioRebalancer is
         }
     }
 
-    /**
-     * @dev Checks and caches Uniswap V3 pools for all token pairs in the basket.
-     *      Reverts if any pair is missing a pool or has zero liquidity.
-     */
-    function _checkUniswapV3Pools(address[] calldata tokens) internal {
-        uint256 len = tokens.length;
-        IUniswapV3Factory factory = IUniswapV3Factory(uniswapV3Factory);
-        for (uint256 i = 0; i < len; i++) {
-            for (uint256 j = 0; j < len; j++) {
-                if (i == j) continue;
-                address pool = factory.getPool(tokens[i], tokens[j], DEFAULT_FEE);
-                if (pool == address(0)) revert NoPoolForToken();
-                uint128 liquidity = IUniswapV3Pool(pool).liquidity();
-                if (liquidity == 0) revert NoLiquidityForToken();
-                swapPools[tokens[i]][tokens[j]] = pool; // Cache the pool address
-            }
-        }
-    }
 
-    /**
-     * @dev Returns true if the deviation between actual and target allocation exceeds the threshold.
-     */
-    function _exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) internal pure returns (bool) {
-        uint256 deviation = pct > target ? pct - target : target - pct;
-        return deviation > threshold;
-    }
+
+
 
     // Internal fee transfer
     /**
