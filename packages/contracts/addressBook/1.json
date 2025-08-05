@@ -10,7 +10,6 @@
     "AAVE": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9"
   },
   "chainlink": {
-    "agregatorV3Interface": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
     "priceFeedWETH": "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
     "priceFeedAAVE": "0x547a514d5e3769680Ce22B2361c10Ea13619e8a9",
     "priceFeedUSDC": "0x8fFfFfd4AfB6115b954Bd326cbe7B4BA576818f6",
@@ -19,9 +18,9 @@
     "priceFeedLINK": "0x2c1d072e956AFFC0D435Cb7AC38EF18d24d9127c"
   },
   "uniswap": {
-    "uniswapV4Factory": "0x0000000000000000000000000000000000000000",
-    "uniswapV4PoolFactory": "0x0000000000000000000000000000000000000000",
-    "uniswapV4Router": "0x0000000000000000000000000000000000000000"
+    "factory": "0x1F98431c8aD98523631AE4a59f267346ea31F984",
+    "router": "0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45",
+    "quoter": "0x61fFE014bA17989E743c5F6cB21bF9697530B21e"
   },
   "portfolioRebalancer": {
     "implementation": "",

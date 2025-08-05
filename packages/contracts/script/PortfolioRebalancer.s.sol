@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {DeployPortfolioTreasury} from "./PortfolioTreasury.s.sol";
 import {DeployPortfolioRebalancerFactory} from "./PortfolioRebalancerFactory.s.sol";
+import {PortfolioTreasury} from "../src/PortfolioTreasury.sol";
 
 /**
  * @title DeployPortfolioRebalancer
@@ -13,7 +14,7 @@ import {DeployPortfolioRebalancerFactory} from "./PortfolioRebalancerFactory.s.s
 contract DeployPortfolioRebalancer is Script {
     DeployPortfolioTreasury public treasuryDeployer;
     DeployPortfolioRebalancerFactory public factoryDeployer;
-    
+
     address public treasuryAddress;
     address public factoryAddress;
 
@@ -25,25 +26,30 @@ contract DeployPortfolioRebalancer is Script {
      */
     function runWithVerification() public {
         uint256 chainId = block.chainid;
-        
+
         console.log("=== Portfolio Rebalancer Full System Deployment (WITH VERIFICATION) ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", msg.sender);
         console.log("NOTE: Ensure ETHERSCAN_API_KEY is set for verification");
-        
+
         // 1. Deploy Treasury system
         console.log("\n=== Step 1: Deploying Treasury System ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress = treasuryDeployer.run();
         console.log("COMPLETE: Treasury deployment completed");
-        
+
         // 2. Deploy Factory system (reads treasury address from addressBook)
         console.log("\n=== Step 2: Deploying Factory System ===");
         factoryDeployer = new DeployPortfolioRebalancerFactory();
         factoryAddress = factoryDeployer.run();
         console.log("COMPLETE: Factory deployment completed");
-        
-        // 3. Final summary with verification instructions
+
+        // 3. Configure factory role in treasury for automation
+        console.log("\n=== Step 3: Configuring Factory Role for Automation ===");
+        _configureFactoryRole(treasuryAddress, factoryAddress);
+        console.log("COMPLETE: Factory role configured for automation");
+
+        // 4. Final summary with verification instructions
         _logFinalSummaryWithVerification(chainId);
     }
 
@@ -52,23 +58,23 @@ contract DeployPortfolioRebalancer is Script {
      */
     function run() public {
         uint256 chainId = block.chainid;
-        
+
         console.log("=== Portfolio Rebalancer Full System Deployment ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", msg.sender);
-        
+
         // 1. Deploy Treasury system
         console.log("\n=== Step 1: Deploying Treasury System ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress = treasuryDeployer.run();
         console.log("!! Treasury deployment completed");
-        
+
         // 2. Deploy Factory system (reads treasury address from addressBook)
         console.log("\n=== Step 2: Deploying Factory System ===");
         factoryDeployer = new DeployPortfolioRebalancerFactory();
         factoryAddress = factoryDeployer.run();
         console.log("! Factory deployment completed");
-        
+
         // 3. Final summary
         _logFinalSummary(chainId);
     }
@@ -79,30 +85,32 @@ contract DeployPortfolioRebalancer is Script {
      * @param uniswapV4Router Uniswap V4 router for treasury swaps
      * @param treasuryAdmin Treasury admin address
      */
-    function runWithCustomTreasury(
-        address linkToken,
-        address uniswapV4Router,
-        address treasuryAdmin
-    ) public {
+    function runWithCustomTreasury(address linkToken, address uniswapV4Router, address treasuryAdmin) public {
         uint256 chainId = block.chainid;
-        
+
         console.log("=== Portfolio Rebalancer Full System Deployment (Custom Treasury) ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", msg.sender);
         console.log("Treasury Admin:", treasuryAdmin);
-        
+
+        // Read automation registry from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        string memory json = vm.readFile(filename);
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
-        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, treasuryAdmin);
+        treasuryAddress =
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
         console.log("!! Treasury deployment completed");
-        
+
         // 2. Deploy Factory system (reads treasury address from addressBook)
         console.log("\n=== Step 2: Deploying Factory System ===");
         factoryDeployer = new DeployPortfolioRebalancerFactory();
         factoryAddress = factoryDeployer.run();
         console.log("!! Factory deployment completed");
-        
+
         // 3. Final summary
         _logFinalSummary(chainId);
     }
@@ -123,26 +131,32 @@ contract DeployPortfolioRebalancer is Script {
         uint256 feeBps
     ) public {
         uint256 chainId = block.chainid;
-        
+
         console.log("=== Portfolio Rebalancer Full System Deployment (Custom Parameters) ===");
         console.log("Chain ID:", chainId);
         console.log("Deployer:", msg.sender);
         console.log("Treasury Admin:", treasuryAdmin);
         console.log("Factory Admin:", factoryAdmin);
         console.log("Fee BPS:", feeBps);
-        
+
+        // Read automation registry from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        string memory json = vm.readFile(filename);
+        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
-        treasuryAddress = treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, treasuryAdmin);
+        treasuryAddress =
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
         console.log("!! Treasury deployment completed");
-        
+
         // 2. Deploy Factory system with custom parameters
         console.log("\n=== Step 2: Deploying Factory System (Custom Parameters) ===");
         factoryDeployer = new DeployPortfolioRebalancerFactory();
         factoryAddress = factoryDeployer.deployWithParams(treasuryAddress, factoryAdmin, feeBps);
         console.log("!! Factory deployment completed");
-        
+
         // 3. Final summary
         _logFinalSummary(chainId);
     }
@@ -154,19 +168,19 @@ contract DeployPortfolioRebalancer is Script {
     function runForChain(uint256 chainId) public {
         console.log("=== Portfolio Rebalancer Full System Deployment (Chain ID:", chainId, ") ===");
         console.log("Deployer:", msg.sender);
-        
+
         // 1. Deploy Treasury for specific chain
         console.log("\n=== Step 1: Deploying Treasury System ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress = treasuryDeployer.deployForChain(chainId);
         console.log("!! Treasury deployment completed");
-        
+
         // 2. Deploy Factory system for specific chain
         console.log("\n=== Step 2: Deploying Factory System ===");
         factoryDeployer = new DeployPortfolioRebalancerFactory();
         factoryAddress = factoryDeployer.deployForChain(chainId);
         console.log("!! Factory deployment completed");
-        
+
         // 3. Final summary
         _logFinalSummary(chainId);
     }
@@ -197,7 +211,11 @@ contract DeployPortfolioRebalancer is Script {
         console.log("");
         console.log("  3. Verify contracts on Etherscan:");
         console.log("     forge verify-contract", treasuryAddress, "src/PortfolioTreasury.sol:PortfolioTreasury");
-        console.log("     forge verify-contract", factoryAddress, "src/PortfolioRebalancerFactory.sol:PortfolioRebalancerFactory");
+        console.log(
+            "     forge verify-contract",
+            factoryAddress,
+            "src/PortfolioRebalancerFactory.sol:PortfolioRebalancerFactory"
+        );
         console.log("");
         console.log(">>> System is ready for production use! <<<");
     }
@@ -214,27 +232,29 @@ contract DeployPortfolioRebalancer is Script {
         console.log("- Factory Address:", factoryAddress);
         console.log("- Deployer:", msg.sender);
         console.log("");
-        
+
         console.log("Verification Status:");
         console.log("PASS: All deployments validated");
         console.log("PASS: Proxy -> Implementation links verified");
         console.log("PASS: Access control roles confirmed");
         console.log("PASS: Contracts ready for Etherscan verification");
         console.log("");
-        
+
         console.log(string.concat("All addresses saved to: addressBook/", vm.toString(chainId), ".json"));
         console.log("");
-        
+
         console.log("Etherscan Verification:");
         console.log("1. AUTOMATIC (recommended):");
         console.log("   Add --verify flag to deployment commands");
         console.log("   Example: forge script ... --broadcast --verify");
-        console.log(""); 
+        console.log("");
         console.log("2. MANUAL (if automatic fails):");
         console.log("   Read deployed addresses from addressBook and verify:");
-        console.log("   forge verify-contract <IMPL_ADDRESS> <CONTRACT_PATH> --chain-id", vm.toString(chainId), "--watch");
+        console.log(
+            "   forge verify-contract <IMPL_ADDRESS> <CONTRACT_PATH> --chain-id", vm.toString(chainId), "--watch"
+        );
         console.log("");
-        
+
         console.log("Next Steps:");
         console.log("  1. Users can create vaults:");
         console.log("     cast call", factoryAddress, '"createVault(...)"');
@@ -242,5 +262,22 @@ contract DeployPortfolioRebalancer is Script {
         console.log("  3. Set up monitoring and governance");
         console.log("");
         console.log(">>> System is ready for production use! <<<");
+    }
+
+    /**
+     * @dev Configure factory role in treasury to enable automation registration
+     * @param treasuryAddr Treasury contract address
+     * @param factoryAddr Factory contract address
+     */
+    function _configureFactoryRole(address treasuryAddr, address factoryAddr) internal {
+        vm.startBroadcast();
+
+        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddr);
+        treasury.setFactory(factoryAddr);
+
+        vm.stopBroadcast();
+
+        console.log("Factory role granted to:", factoryAddr);
+        console.log("Treasury can now register upkeeps for vaults created by factory");
     }
 }

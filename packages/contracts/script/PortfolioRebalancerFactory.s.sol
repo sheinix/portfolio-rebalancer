@@ -20,18 +20,18 @@ contract DeployPortfolioRebalancerFactory is Script {
      */
     function run() public returns (address factoryAddress) {
         uint256 chainId = block.chainid;
-        
+
         // Read treasury address from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         console.log("Reading treasury address from:", filename);
         string memory json = vm.readFile(filename);
-        
+
         address treasuryAddress = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
-        address admin = msg.sender;
-        
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
+
         console.log("Treasury address from addressBook:", treasuryAddress);
         console.log("Factory admin:", admin);
-        
+
         return _deployFactoryCore(chainId, treasuryAddress, admin);
     }
 
@@ -42,12 +42,12 @@ contract DeployPortfolioRebalancerFactory is Script {
      */
     function deployWithTreasury(address treasuryAddress) public returns (address factoryAddress) {
         uint256 chainId = block.chainid;
-        address admin = msg.sender;
-        
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
+
         console.log("Deploying with custom treasury address");
         console.log("Treasury address:", treasuryAddress);
         console.log("Factory admin:", admin);
-        
+
         return _deployFactoryCore(chainId, treasuryAddress, admin);
     }
 
@@ -58,18 +58,17 @@ contract DeployPortfolioRebalancerFactory is Script {
      * @param feeBps Fee in basis points
      * @return factoryAddress The deployed factory proxy address
      */
-    function deployWithParams(
-        address treasuryAddress,
-        address admin,
-        uint256 feeBps
-    ) public returns (address factoryAddress) {
+    function deployWithParams(address treasuryAddress, address admin, uint256 feeBps)
+        public
+        returns (address factoryAddress)
+    {
         uint256 chainId = block.chainid;
-        
+
         console.log("Deploying with custom parameters");
         console.log("Treasury address:", treasuryAddress);
         console.log("Factory admin:", admin);
         console.log("Fee BPS:", feeBps);
-        
+
         return _deployFactoryCoreWithFee(chainId, treasuryAddress, admin, feeBps);
     }
 
@@ -83,14 +82,14 @@ contract DeployPortfolioRebalancerFactory is Script {
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         console.log("Reading treasury address from:", filename);
         string memory json = vm.readFile(filename);
-        
+
         address treasuryAddress = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
-        address admin = msg.sender;
-        
+        address admin = tx.origin; // Use actual deployer EOA, not script contract
+
         console.log("Target Chain ID:", chainId);
         console.log("Treasury address:", treasuryAddress);
         console.log("Factory admin:", admin);
-        
+
         return _deployFactoryCore(chainId, treasuryAddress, admin);
     }
 
@@ -101,11 +100,10 @@ contract DeployPortfolioRebalancerFactory is Script {
      * @param admin Factory admin address
      * @return factoryAddress The deployed factory proxy address
      */
-    function _deployFactoryCore(
-        uint256 chainId,
-        address treasuryAddress,
-        address admin
-    ) internal returns (address factoryAddress) {
+    function _deployFactoryCore(uint256 chainId, address treasuryAddress, address admin)
+        internal
+        returns (address factoryAddress)
+    {
         return _deployFactoryCoreWithFee(chainId, treasuryAddress, admin, 50); // 0.5% default fee
     }
 
@@ -117,12 +115,10 @@ contract DeployPortfolioRebalancerFactory is Script {
      * @param feeBps Fee in basis points
      * @return factoryAddress The deployed factory proxy address
      */
-    function _deployFactoryCoreWithFee(
-        uint256 chainId,
-        address treasuryAddress,
-        address admin,
-        uint256 feeBps
-    ) internal returns (address factoryAddress) {
+    function _deployFactoryCoreWithFee(uint256 chainId, address treasuryAddress, address admin, uint256 feeBps)
+        internal
+        returns (address factoryAddress)
+    {
         vm.startBroadcast();
 
         console.log("=== Factory System Deployment Core ===");
@@ -151,20 +147,19 @@ contract DeployPortfolioRebalancerFactory is Script {
         bytes memory factoryData = abi.encodeWithSelector(
             PortfolioRebalancerFactory.initialize.selector,
             address(implementation), // portfolio implementation
-            treasuryAddress,         // treasury proxy address
-            feeBps,                  // fee in basis points
-            admin,                   // admin
-            address(proxyAdmin)      // ProxyAdmin for vault management
+            treasuryAddress, // treasury proxy address
+            feeBps, // fee in basis points
+            admin, // admin
+            address(proxyAdmin) // ProxyAdmin for vault management
         );
-        
+
         factoryProxy = new ERC1967Proxy(address(factoryImpl), factoryData);
         factory = PortfolioRebalancerFactory(address(factoryProxy));
         console.log("Factory proxy deployed at:", address(factory));
 
-        // 5. Transfer ProxyAdmin ownership to Factory admin
+        // 5. ProxyAdmin ownership is already configured during deployment
         console.log("\n5. Configuring permissions...");
-        proxyAdmin.transferOwnership(admin);
-        console.log("ProxyAdmin ownership transferred to:", admin);
+        console.log("ProxyAdmin ownership configured to:", admin);
 
         // 6. Validate deployment and proxy-implementation linking
         _validateFactoryDeployment(
@@ -181,10 +176,10 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("\n7. Updating addressBook...");
         _updateAddressBook(
             chainId,
-            address(implementation),  // portfolio implementation
-            address(factoryImpl),     // factory implementation  
-            address(factory),         // factory proxy
-            address(proxyAdmin)       // proxy admin
+            address(implementation), // portfolio implementation
+            address(factoryImpl), // factory implementation
+            address(factory), // factory proxy
+            address(proxyAdmin) // proxy admin
         );
 
         // 8. Log deployment summary
@@ -201,7 +196,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("10. AddressBook updated");
 
         vm.stopBroadcast();
-        
+
         return address(factory);
     }
 
@@ -221,17 +216,17 @@ contract DeployPortfolioRebalancerFactory is Script {
         address proxyAdminAddr
     ) internal {
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
-        
+
         // Update all factory system addresses
         vm.writeJson(vm.toString(portfolioImpl), filename, ".portfolioRebalancer.implementation");
         vm.writeJson(vm.toString(factoryImpl), filename, ".portfolioRebalancer.factoryImplementation");
         vm.writeJson(vm.toString(factoryProxyAddr), filename, ".portfolioRebalancer.factory");
         vm.writeJson(vm.toString(proxyAdminAddr), filename, ".portfolioRebalancer.proxyAdmin");
-        
+
         // Add deployment metadata
         vm.writeJson(vm.toString(block.number), filename, ".portfolioRebalancer.deploymentBlock");
         vm.writeJson(vm.toString(block.timestamp), filename, ".portfolioRebalancer.deploymentTimestamp");
-        
+
         console.log("Updated addressBook file:", filename);
         console.log("Portfolio Implementation:", portfolioImpl);
         console.log("Factory Implementation:", factoryImpl);
@@ -244,8 +239,7 @@ contract DeployPortfolioRebalancerFactory is Script {
     /**
      * @dev Validates the factory deployment and proxy-implementation linking
      * @param portfolioImpl Portfolio implementation address
-     * @param factoryImpl Factory implementation address
-     * @param factoryProxy Factory proxy address
+     * @param factoryProxyAddr Factory proxy address
      * @param proxyAdminAddr ProxyAdmin address
      * @param treasuryAddr Treasury address
      * @param expectedAdmin Expected admin address
@@ -253,29 +247,32 @@ contract DeployPortfolioRebalancerFactory is Script {
      */
     function _validateFactoryDeployment(
         address portfolioImpl,
-        address factoryImpl,
-        address factoryProxy,
+        address, /* factoryImpl */
+        address factoryProxyAddr,
         address proxyAdminAddr,
         address treasuryAddr,
         address expectedAdmin,
         uint256 expectedFeeBps
     ) internal view {
         console.log("\n=== Factory System Deployment Validation ===");
-        
+
         // 1. Validate factory proxy configuration
-        PortfolioRebalancerFactory factoryContract = PortfolioRebalancerFactory(factoryProxy);
-        
+        PortfolioRebalancerFactory factoryContract = PortfolioRebalancerFactory(factoryProxyAddr);
+
         // 2. Validate factory settings
         require(factoryContract.implementation() == portfolioImpl, "Portfolio implementation mismatch");
         require(factoryContract.treasury() == treasuryAddr, "Treasury address mismatch");
         require(factoryContract.feeBps() == expectedFeeBps, "Fee BPS mismatch");
-        require(factoryContract.hasRole(factoryContract.DEFAULT_ADMIN_ROLE(), expectedAdmin), "Factory admin role not granted");
+        require(
+            factoryContract.hasRole(factoryContract.DEFAULT_ADMIN_ROLE(), expectedAdmin),
+            "Factory admin role not granted"
+        );
         require(factoryContract.hasRole(factoryContract.ADMIN_ROLE(), expectedAdmin), "Factory ADMIN_ROLE not granted");
-        
+
         // 3. Validate ProxyAdmin ownership
         ProxyAdmin proxyAdminContract = ProxyAdmin(proxyAdminAddr);
         require(proxyAdminContract.owner() == expectedAdmin, "ProxyAdmin ownership not transferred");
-        
+
         console.log("PASS: Factory Proxy -> Implementation: LINKED");
         console.log("PASS: Portfolio Implementation:", portfolioImpl);
         console.log("PASS: Treasury Address:", treasuryAddr);
@@ -284,4 +281,4 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("PASS: ProxyAdmin Ownership: TRANSFERRED");
         console.log("PASS: Factory System: READY FOR VAULT CREATION");
     }
-} 
+}

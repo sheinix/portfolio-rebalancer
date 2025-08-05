@@ -1,14 +1,107 @@
-# Compiler files
-cache/
+# Foundry & Forge
 out/
+cache/
+artifacts/
+lib/
+broadcast/
+deployments/
 
-# Ignores development broadcast logs
-!/broadcast
-/broadcast/*/31337/
-/broadcast/**/dry-run/
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Docs
-docs/
-
-# Dotenv file
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Coverage reports
+coverage/
+coverage.json
+*.lcov
+
+# Test results
+test-results/
+test-report.xml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Solidity compiler artifacts
+*.dbg.json
+*.tsbuildinfo
+contracts/artifacts/
+artifacts/**
+
+# Gas reports
+gas-report.txt
+.gas-snapshot
+
+# Documentation build
+docs/
+docgen/
+
+# Script artifacts and sensitive data
+script/deployments/
+script/logs/
+script/*.json
+!script/addressBook.json
+
+# Backup files
+*.bak
+*.backup
+
+# Python (if using Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Local configuration
+.local
+.cache
+
+# Remix IDE artifacts
+deps/
+states/
+
+# Hardhat (if used alongside Foundry)
+cache_hardhat/
+typechain/
+typechain-types/
+
+# Slither analysis
+slither-report.json
+
+# Mythril analysis
+mythril-report.json
+
+# Echidna fuzzing
+echidna-corpus/

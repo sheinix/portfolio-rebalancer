@@ -9,20 +9,15 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solmate/utils/FixedPointMathLib.sol";
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/automation/AutomationCompatible.sol";
-import "./interfaces/IUniswapV4.sol";
+import "./interfaces/IUniswapV3.sol";
+import "./libraries/ValidationLibrary.sol";
+import "./libraries/PortfolioLogicLibrary.sol";
+import "./libraries/PortfolioStructs.sol";
 
-struct PortfolioSnapshot {
-    uint256[] balances;
-    uint256[] prices;
-    uint256 totalUSD;
-}
+event SwapExecuted(
+    address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut
+);
 
- struct TokenDelta {
-    uint256 index;
-    int256 usd;
-}
-
-event SwapExecuted(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut);
 event SwapPlanned(address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 usdAmount);
 
 /**
@@ -30,23 +25,27 @@ event SwapPlanned(address indexed user, address indexed tokenIn, address indexed
  * @notice Upgradeable contract for managing and auto-rebalancing a basket of ERC-20 tokens per user.
  * @dev Uses Transparent Proxy pattern, Ownable, ReentrancyGuard, Chainlink Keeper-compatible, uses custom errors for gas savings.
  */
-contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable, AutomationCompatibleInterface {
+contract PortfolioRebalancer is
+    Initializable,
+    OwnableUpgradeable,
+    ReentrancyGuardUpgradeable,
+    AutomationCompatibleInterface
+{
     using FixedPointMathLib for uint256;
     using SafeERC20 for IERC20;
+    using ValidationLibrary for address;
+    using ValidationLibrary for address[];
+    using PortfolioLogicLibrary for TokenInfo[];
 
-    // Uniswap V4 factory address (set at initialization)
-    address public uniswapV4Factory;
+    // Uniswap V3 factory address (set at initialization)
+    address public uniswapV3Factory;
+
+    // Default fee tier for V3 pools (0.3% = 3000)
+    uint24 public constant DEFAULT_FEE = 3000;
 
     // Constants
     uint256 public constant MAX_TOKENS = 6;
     uint256 public constant ALLOCATION_SCALE = 1e6; // 100% = 1,000,000
-
-    // Storage
-    struct TokenInfo {
-        address token;
-        address priceFeed; // Chainlink AggregatorV3Interface
-        uint256 targetAllocation; // scaled by ALLOCATION_SCALE
-    }
 
     // List of basket tokens
     TokenInfo[] public basket;
@@ -60,7 +59,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
 
     // tokenA => tokenB => pool address
     mapping(address => mapping(address => address)) public swapPools;
-    
+
     // Rebalance threshold (in ALLOCATION_SCALE units, e.g. 0.01 = 10,000)
     uint256 public rebalanceThreshold;
 
@@ -84,17 +83,8 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     error NotUser();
     error AllocationSumMismatch();
     error ExceedsMaxTokens();
-    error ZeroAddress();
-    error ZeroTreasury();
-    error ZeroFactory();
     error NotEnoughBalance();
-    error PriceFeedError();
     error NoRebalanceNeeded();
-    error NoPoolForToken();
-    error NoLiquidityForToken();
-    error InvalidPriceFeedCall(address feed);
-    error InvalidPriceFeedAnswer(address feed);
-    error InvalidPriceFeedUpdate(address feed);
 
     // Initializer
     /**
@@ -103,25 +93,28 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param _rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
-     * @param _uniswapV4Factory Uniswap V4 factory address.
+     * @param _uniswapV3Factory Uniswap V3 factory address.
      * @param _feeBps Fee in basis points (e.g., 10 = 0.1%). Immutable after initialization.
      * @param _treasury Treasury address for fee collection. Immutable after initialization.
+     * @param _owner The owner of this vault (usually the user who called createVault).
      */
     function initialize(
         address[] calldata tokens,
         address[] calldata priceFeeds,
         uint256[] calldata allocations,
         uint256 _rebalanceThreshold,
-        address _uniswapV4Factory,
+        address _uniswapV3Factory,
         uint256 _feeBps,
-        address _treasury
+        address _treasury,
+        address _owner
     ) external initializer {
-        if (_treasury == address(0)) revert ZeroTreasury();
-        if (_uniswapV4Factory == address(0)) revert ZeroFactory();
-        
-        __Ownable_init(msg.sender);
+        _treasury.validateTreasury();
+        _uniswapV3Factory.validateFactory();
+        _owner.validateNonZeroAddress();
+
+        __Ownable_init(_owner);
         __ReentrancyGuard_init();
-        uniswapV4Factory = _uniswapV4Factory;
+        uniswapV3Factory = _uniswapV3Factory;
         _setBasket(tokens, priceFeeds, allocations);
         rebalanceThreshold = _rebalanceThreshold;
         feeBps = _feeBps;
@@ -136,28 +129,37 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
      * @param priceFeeds Chainlink price feed addresses for each token.
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      */
-    function setBasket(
-        address[] calldata tokens,
-        address[] calldata priceFeeds,
-        uint256[] calldata allocations
-    ) external onlyOwner {
+    function setBasket(address[] calldata tokens, address[] calldata priceFeeds, uint256[] calldata allocations)
+        external
+        onlyOwner
+    {
         _setBasket(tokens, priceFeeds, allocations);
     }
 
-    function _setBasket(
-        address[] calldata tokens,
-        address[] calldata priceFeeds,
-        uint256[] calldata allocations
-    ) internal {
+    function _setBasket(address[] calldata tokens, address[] calldata priceFeeds, uint256[] calldata allocations)
+        internal
+    {
         uint256 len = tokens.length;
         if (len == 0 || len > MAX_TOKENS) revert ExceedsMaxTokens();
-        if (len != priceFeeds.length || len != allocations.length) revert AllocationSumMismatch();
+        ValidationLibrary.validateArrayLengths(len, priceFeeds.length, allocations.length);
         uint256 sum;
         _clearBasketAndWhitelist();
-        _checkUniswapV4Pools(tokens);
+        
+        // Validate tokens, price feeds, and pools - get pool addresses
+        tokens.validateNonZeroAddresses();
+        priceFeeds.validatePriceFeeds();
+        address[][] memory poolAddresses = ValidationLibrary.validateAndGetUniswapV3Pools(tokens, uniswapV3Factory, DEFAULT_FEE);
+        
+        // Cache pool addresses for all token pairs
         for (uint256 i = 0; i < len; i++) {
-            if (tokens[i] == address(0) || priceFeeds[i] == address(0)) revert ZeroAddress();
-            _validatePriceFeed(priceFeeds[i]);
+            for (uint256 j = 0; j < len; j++) {
+                if (i != j && poolAddresses[i][j] != address(0)) {
+                    swapPools[tokens[i]][tokens[j]] = poolAddresses[i][j];
+                }
+            }
+        }
+        
+        for (uint256 i = 0; i < len; i++) {
             basket.push(TokenInfo({token: tokens[i], priceFeed: priceFeeds[i], targetAllocation: allocations[i]}));
             tokenIndex[tokens[i]] = i;
             isWhitelisted[tokens[i]] = true;
@@ -215,7 +217,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         if (amount == 0) revert InvalidAmount();
         userBalances[msg.sender][token] += amount;
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
-        _ensureSwapApproval(token); // Infinite-approve for Uniswap swaps
+        _ensureSwapApproval(token); // Infinite-approve for Uniswap V3 swaps
         if (autoRebalance) {
             (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
             _rebalance(msg.sender, snapshot);
@@ -253,7 +255,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
 
     // Rebalance Logic
     /**
-     * @notice Manually rebalance your vault to match target allocations using Uniswap V4. Only callable by the vault owner.
+     * @notice Manually rebalance your vault to match target allocations using Uniswap V3. Only callable by the vault owner.
      */
     function rebalance() external nonReentrant onlyOwner {
         (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
@@ -283,48 +285,35 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     }
 
     /**
+     * @dev Helper function to extract user balances into an array
+     */
+    function _getUserBalancesArray(address user) internal view returns (uint256[] memory balances) {
+        uint256 len = basket.length;
+        balances = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            balances[i] = userBalances[user][basket[i].token];
+        }
+    }
+
+    /**
      * @dev Checks if user's portfolio deviates from target allocations beyond threshold.
      *      Returns (needsRebalance, snapshot) for efficient reuse.
      */
     function _needsRebalance(address user) internal view returns (bool, PortfolioSnapshot memory) {
-        uint256 len = basket.length;
-        uint256[] memory balances = new uint256[](len);
-        uint256[] memory prices = new uint256[](len);
-        uint256 totalUSD = 0;
-        bool needs = false;
-        for (uint256 i = 0; i < len; i++) {
-            address token = basket[i].token;
-            balances[i] = userBalances[user][token];
-            prices[i] = _getLatestPrice(basket[i].priceFeed);
-            totalUSD += balances[i].mulWadDown(prices[i]);
-        }
-        for (uint256 i = 0; i < len; i++) {
-            uint256 value = balances[i].mulWadDown(prices[i]);
-            uint256 pct = value == 0 ? 0 : value.divWadDown(totalUSD);
-            uint256 target = basket[i].targetAllocation;
-            if (_exceedsDeviation(pct, target, rebalanceThreshold)) {
-                needs = true;
-                break;
-            }
-        }
-        return (needs, PortfolioSnapshot(balances, prices, totalUSD));
+        uint256[] memory balances = _getUserBalancesArray(user);
+        return PortfolioLogicLibrary.needsRebalance(basket, balances, rebalanceThreshold);
     }
 
     /**
      * @dev Computes the USD delta for each token: currentUsd - targetUsd.
      */
-    function _computeDeltaUsd(uint256[] memory balances, uint256[] memory prices, uint256 totalUSD) internal view returns (int256[] memory) {
-        uint256 len = basket.length;
-        int256[] memory deltas = new int256[](len);
-        for (uint256 i = 0; i < len; i++) {
-            uint256 currentUsd = balances[i].mulWadDown(prices[i]);
-            uint256 targetUsd = (totalUSD * basket[i].targetAllocation) / ALLOCATION_SCALE;
-            deltas[i] = int256(currentUsd) - int256(targetUsd);
-        }
-        return deltas;
+    function _computeDeltaUsd(uint256[] memory balances, uint256[] memory prices, uint256 totalUSD)
+        internal
+        view
+        returns (int256[] memory)
+    {
+        return PortfolioLogicLibrary.computeDeltaUsd(basket, balances, prices, totalUSD);
     }
-
-   
 
     /**
      * @dev Performs the rebalance for a user using Greedy Pairwise Matching. Assumes infinite approvals are set in deposit().
@@ -350,13 +339,14 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
             }
         }
         // Sort sellers and buyers by usd descending (simple selection sort, fine for small N)
-        _sortDescending(sellers, sellerCount);
-        _sortDescending(buyers, buyerCount);
+        PortfolioLogicLibrary.sortDescending(sellers, sellerCount);
+        PortfolioLogicLibrary.sortDescending(buyers, buyerCount);
 
         uint256 s = 0;
         uint256 b = 0;
         while (s < sellerCount && b < buyerCount) {
-            uint256 tradeUsd = uint256(sellers[s].usd) < uint256(buyers[b].usd) ? uint256(sellers[s].usd) : uint256(buyers[b].usd);
+            uint256 tradeUsd =
+                uint256(sellers[s].usd) < uint256(buyers[b].usd) ? uint256(sellers[s].usd) : uint256(buyers[b].usd);
             uint256 sellIdx = sellers[s].index;
             uint256 buyIdx = buyers[b].index;
             address tokenIn = basket[sellIdx].token;
@@ -364,13 +354,14 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
             address pool = swapPools[tokenIn][tokenOut];
             if (pool == address(0)) {
                 // skip if no pool (should not happen)
-                if (sellers[s].usd <= buyers[b].usd) s++; else b++;
+                if (sellers[s].usd <= buyers[b].usd) s++;
+                else b++;
                 continue;
             }
             // Calculate amountToSell in tokenIn decimals
             uint256 amountToSell = tradeUsd.divWadDown(prices[sellIdx]);
             emit SwapPlanned(user, tokenIn, tokenOut, tradeUsd);
-            (, int256 amount1) = IUniswapV4Pool(pool).swap(
+            (, int256 amount1) = IUniswapV3Pool(pool).swap(
                 address(this),
                 true, // tokenIn -> tokenOut
                 int256(amountToSell),
@@ -387,106 +378,34 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
         emit Rebalanced(user);
     }
 
-    /**
-     * @dev Sorts TokenDelta array in-place by usd descending, up to count elements.
-     */
-    function _sortDescending(TokenDelta[] memory arr, uint256 count) internal pure {
-        for (uint256 i = 0; i < count; i++) {
-            uint256 maxIdx = i;
-            for (uint256 j = i + 1; j < count; j++) {
-                if (arr[j].usd > arr[maxIdx].usd) {
-                    maxIdx = j;
-                }
-            }
-            if (maxIdx != i) {
-                TokenDelta memory tmp = arr[i];
-                arr[i] = arr[maxIdx];
-                arr[maxIdx] = tmp;
-            }
-        }
-    }
+
 
     /**
      * @dev Internal: returns the total USD value of a user's portfolio.
      */
     function _portfolioValueUSD(address user) internal view returns (uint256 total) {
-        for (uint256 i = 0; i < basket.length; i++) {
-            TokenInfo storage info = basket[i];
-            uint256 bal = userBalances[user][info.token];
-            if (bal == 0) continue;
-            uint256 price = _getLatestPrice(info.priceFeed);
-            total += bal.mulWadDown(price);
-        }
+        uint256[] memory balances = _getUserBalancesArray(user);
+        return PortfolioLogicLibrary.portfolioValueUSD(basket, balances);
     }
 
-    /**
-     * @dev Internal: fetches latest price from Chainlink price feed (returns 1e18 USD per token).
-     */
-    function _getLatestPrice(address priceFeed) internal view returns (uint256) {
-        (
-            ,
-            int256 answer,
-            ,
-            ,
-        ) = AggregatorV3Interface(priceFeed).latestRoundData();
-        if (answer <= 0) revert PriceFeedError();
-        // Normalize to 1e18
-        uint8 decimals = AggregatorV3Interface(priceFeed).decimals();
-        return uint256(answer) * (10 ** (18 - decimals));
-    }
+
+
+
 
     /**
-     * @dev Validates that a price feed is a working Chainlink AggregatorV3Interface.
-     *      Reverts with custom errors if the feed is invalid.
-     */
-    function _validatePriceFeed(address priceFeed) internal view {
-        try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-            uint80 /*roundId*/, int256 answer, uint256 /*startedAt*/, uint256 updatedAt, uint80 /*answeredInRound*/
-        ) {
-            if (answer <= 0) revert InvalidPriceFeedAnswer(priceFeed);
-            if (updatedAt == 0) revert InvalidPriceFeedUpdate(priceFeed);
-        } catch {
-            revert InvalidPriceFeedCall(priceFeed);
-        }
-    }
-
-    /**
-     * @dev Ensures the contract has infinite approval for the token to the Uniswap V4 factory (or router/pool as needed).
+     * @dev Ensures the contract has infinite approval for the token to the Uniswap V3 factory (or router/pool as needed).
      *      Only sets approval if allowance is low, to save gas.
      */
     function _ensureSwapApproval(address token) internal {
-        address spender = uniswapV4Factory; // Set to router/pool if needed
+        address spender = uniswapV3Factory; // Set to router/pool if needed
         if (IERC20(token).allowance(address(this), spender) < type(uint256).max / 2) {
             IERC20(token).approve(spender, type(uint256).max);
         }
     }
 
-    /**
-     * @dev Checks and caches Uniswap V4 pools for all token pairs in the basket.
-     *      Reverts if any pair is missing a pool or has zero liquidity.
-     */
-    function _checkUniswapV4Pools(address[] calldata tokens) internal {
-        uint256 len = tokens.length;
-        IUniswapV4PoolFactory factory = IUniswapV4PoolFactory(uniswapV4Factory);
-        for (uint256 i = 0; i < len; i++) {
-            for (uint256 j = 0; j < len; j++) {
-                if (i == j) continue;
-                address pool = factory.getPool(tokens[i], tokens[j]);
-                if (pool == address(0)) revert NoPoolForToken();
-                uint128 liquidity = IUniswapV4Pool(pool).liquidity();
-                if (liquidity == 0) revert NoLiquidityForToken();
-                swapPools[tokens[i]][tokens[j]] = pool; // Cache the pool address
-            }
-        }
-    }
 
-    /**
-     * @dev Returns true if the deviation between actual and target allocation exceeds the threshold.
-     */
-    function _exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) internal pure returns (bool) {
-        uint256 deviation = pct > target ? pct - target : target - pct;
-        return deviation > threshold;
-    }
+
+
 
     // Internal fee transfer
     /**
@@ -523,7 +442,7 @@ contract PortfolioRebalancer is Initializable, OwnableUpgradeable, ReentrancyGua
     /**
      * @notice Returns the Uniswap V4 factory address.
      */
-    function getUniswapV4Factory() external view returns (address) {
-        return uniswapV4Factory;
+    function getUniswapV3Factory() external view returns (address) {
+        return uniswapV3Factory;
     }
 }
