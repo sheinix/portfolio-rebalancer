@@ -18,6 +18,8 @@ contract PortfolioRebalancerTest is Test {
     address owner = address(0xABCD);
     address treasury = address(0xBEEF);
     address uniswapV3Factory = address(0xCAFE);
+    address uniswapV3SwapRouter = address(0xDEAD);
+    address weth = address(0x1234);
 
     function setUp() public {
         _setupTokens();
@@ -101,7 +103,7 @@ contract PortfolioRebalancerTest is Test {
     }
 
     function _setupInitializedContract() internal {
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     // --- initialize Validation Tests ---
@@ -121,7 +123,7 @@ contract PortfolioRebalancerTest is Test {
         }
 
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(tooMany, feeds, allocs, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Revert_AllocationSumMismatch() public {
@@ -137,7 +139,7 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 400_000; // sum != 1e6
 
         vm.expectRevert(PortfolioRebalancer.AllocationSumMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ZeroAddress() public {
@@ -153,12 +155,12 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 500_000;
 
         vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Success() public {
         // Test successful initialization
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
 
         // Verify the basket was set correctly
         (address token, address priceFeed, uint256 targetAllocation) = rebalancer.basket(0);
@@ -178,7 +180,7 @@ contract PortfolioRebalancerTest is Test {
         uint256[] memory emptyAllocs = new uint256[](0);
 
         vm.expectRevert(PortfolioRebalancer.ExceedsMaxTokens.selector);
-        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(emptyTokens, emptyFeeds, emptyAllocs, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ArrayLengthMismatch() public {
@@ -195,34 +197,34 @@ contract PortfolioRebalancerTest is Test {
         a[1] = 500_000;
 
         vm.expectRevert(ValidationLibrary.ArrayLengthMismatch.selector);
-        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(t, f, a, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ZeroTreasury() public {
         // Try to initialize with zero treasury address
         vm.expectRevert(ValidationLibrary.ZeroTreasury.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, address(0), owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, address(0), owner);
     }
 
     function test_initialize_Revert_ZeroFactory() public {
         // Try to initialize with zero factory address
         vm.expectRevert(ValidationLibrary.ZeroFactory.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, address(0), 10, treasury, owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, address(0), uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     function test_initialize_Revert_ZeroOwner() public {
         // Try to initialize with zero owner address
         vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, address(0));
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, address(0));
     }
 
     function test_initialize_Revert_DoubleInitialization() public {
         // Initialize once successfully
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
 
         // Try to initialize again (should revert due to initializer modifier)
         vm.expectRevert();
-        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
+        rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
     // --- setBasket Validation Tests ---
@@ -890,7 +892,7 @@ contract PortfolioRebalancerTest is Test {
 
     function test_computeDeltaUsd() public {
         PortfolioRebalancerTestable testable = new PortfolioRebalancerTestable();
-        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, 10, treasury, owner);
+        testable.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, treasury, owner);
 
         // Setup test data: 6 tokens (matching the basket) with specific balances and prices
         uint256[] memory balances = new uint256[](6);

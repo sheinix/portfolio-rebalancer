@@ -48,6 +48,7 @@ contract VaultCreationTest is Test {
     address public uniswapV3Factory;
     address public uniswapV3Router;
     address public uniswapV3SwapRouter;
+    address public weth;
     address public linkToken;
     address public automationRegistry;
 
@@ -102,6 +103,7 @@ contract VaultCreationTest is Test {
             uniswapV3Factory = vm.parseJsonAddress(json, ".uniswap.factory");
             uniswapV3Router = vm.parseJsonAddress(json, ".uniswap.router");
             uniswapV3SwapRouter = vm.parseJsonAddress(json, ".uniswap.swapRouter");
+            weth = vm.parseJsonAddress(json, ".coins.WETH");
             linkToken = vm.parseJsonAddress(json, ".coins.LINK");
             automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
 
@@ -122,6 +124,8 @@ contract VaultCreationTest is Test {
         MockUniswapV3Factory mockFactory = new MockUniswapV3Factory();
         uniswapV3Factory = address(mockFactory);
         uniswapV3Router = address(0x4444); // Mock router address
+        uniswapV3SwapRouter = address(0x5555); // Mock swap router address
+        weth = address(0x6666); // Mock WETH address
         linkToken = address(new MockERC20("Chainlink Token", "LINK", 18, 1_000_000 ether));
         automationRegistry = address(new MockAutomationRegistry());
 
@@ -408,6 +412,8 @@ contract VaultCreationTest is Test {
             allocations,
             REBALANCE_THRESHOLD,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -449,6 +455,8 @@ contract VaultCreationTest is Test {
             allocations,
             REBALANCE_THRESHOLD,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -472,6 +480,8 @@ contract VaultCreationTest is Test {
             differentAllocations,
             5_000, // 0.5% threshold
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -510,6 +520,8 @@ contract VaultCreationTest is Test {
             allocations,
             REBALANCE_THRESHOLD,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -531,6 +543,8 @@ contract VaultCreationTest is Test {
             allocations,
             REBALANCE_THRESHOLD,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -575,6 +589,8 @@ contract VaultCreationTest is Test {
             allocations,
             REBALANCE_THRESHOLD,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             GAS_LIMIT,
             LINK_AMOUNT
         );
@@ -619,7 +635,7 @@ contract VaultCreationTest is Test {
         vm.prank(vaultOwner);
         vm.expectRevert();
         factory.createVault(
-            twoTokens, twoFeeds, invalidAllocations, REBALANCE_THRESHOLD, uniswapV3Factory, GAS_LIMIT, LINK_AMOUNT
+            twoTokens, twoFeeds, invalidAllocations, REBALANCE_THRESHOLD, uniswapV3Factory, uniswapV3SwapRouter, weth, GAS_LIMIT, LINK_AMOUNT
         );
     }
 
@@ -638,7 +654,7 @@ contract VaultCreationTest is Test {
         vm.prank(vaultOwner);
         vm.expectRevert();
         factory.createVault(
-            oneToken, twoFeeds, oneAllocation, REBALANCE_THRESHOLD, uniswapV3Factory, GAS_LIMIT, LINK_AMOUNT
+            oneToken, twoFeeds, oneAllocation, REBALANCE_THRESHOLD, uniswapV3Factory, uniswapV3SwapRouter, weth, GAS_LIMIT, LINK_AMOUNT
         );
     }
 }

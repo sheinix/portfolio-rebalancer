@@ -96,6 +96,7 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
                 tokenOut: link,
                 fee: fee,
                 recipient: address(this),
+                deadline: block.timestamp + 300, // 5 minutes deadline
                 amountIn: amountIn,
                 amountOutMinimum: amountOutMin,
                 sqrtPriceLimitX96: 0
