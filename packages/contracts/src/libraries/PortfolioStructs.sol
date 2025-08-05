@@ -6,7 +6,6 @@ pragma solidity ^0.8.19;
  * @notice Shared data structures for portfolio management
  * @dev Contains common structs used across portfolio contracts and libraries
  */
-
 struct TokenInfo {
     address token;
     address priceFeed; // Chainlink AggregatorV3Interface
@@ -22,4 +21,4 @@ struct PortfolioSnapshot {
 struct TokenDelta {
     uint256 index;
     int256 usd;
-} 
+}

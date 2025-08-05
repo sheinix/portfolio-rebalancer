@@ -513,7 +513,7 @@ contract PortfolioRebalancerTest is Test {
 
         // Give owner some tokens to deposit
         tokens[0].transfer(owner, depositAmount);
-        
+
         vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
 
@@ -561,7 +561,7 @@ contract PortfolioRebalancerTest is Test {
 
         // Give owner some tokens to deposit
         tokens[0].transfer(owner, depositAmount);
-        
+
         vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
 
@@ -678,7 +678,7 @@ contract PortfolioRebalancerTest is Test {
 
         // First deposit some tokens
         tokens[0].transfer(owner, depositAmount);
-        
+
         vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(token, depositAmount, false);
@@ -698,7 +698,7 @@ contract PortfolioRebalancerTest is Test {
 
         // First deposit some tokens
         tokens[0].transfer(owner, depositAmount);
-        
+
         vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
@@ -749,7 +749,7 @@ contract PortfolioRebalancerTest is Test {
 
         // First deposit some tokens
         tokens[0].transfer(owner, depositAmount);
-        
+
         vm.startPrank(owner);
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);

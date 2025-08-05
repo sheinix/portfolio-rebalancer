@@ -21,7 +21,8 @@
   "uniswap": {
     "factory": "0x0227628f3F023bb0B980b67D528571c95c6DaC1c",
     "router": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E",
-    "quoter": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3"
+    "quoter": "0xEd1f6473345F45b75F8179591dd5bA1888cf2FB3",
+    "swapRouter": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
   },
   "portfolioRebalancer": {
     "implementation": "0xb426B3aD62124D5645083853c95262C4A7244851",

@@ -27,11 +27,11 @@ library PortfolioLogicLibrary {
      * @return needsRebalancing Whether portfolio needs rebalancing
      * @return snapshot Portfolio data snapshot for reuse
      */
-    function needsRebalance(
-        TokenInfo[] memory basket,
-        uint256[] memory userBalances,
-        uint256 rebalanceThreshold
-    ) internal view returns (bool needsRebalancing, PortfolioSnapshot memory snapshot) {
+    function needsRebalance(TokenInfo[] memory basket, uint256[] memory userBalances, uint256 rebalanceThreshold)
+        internal
+        view
+        returns (bool needsRebalancing, PortfolioSnapshot memory snapshot)
+    {
         uint256 len = basket.length;
         uint256[] memory balances = new uint256[](len);
         uint256[] memory prices = new uint256[](len);
@@ -63,7 +63,7 @@ library PortfolioLogicLibrary {
      * @dev Computes the USD delta for each token: currentUsd - targetUsd
      * @param basket Array of token information
      * @param balances Token balances array
-     * @param prices Token prices array  
+     * @param prices Token prices array
      * @param totalUSD Total portfolio value in USD
      * @return deltas Array of USD deltas for each token
      */
@@ -75,7 +75,7 @@ library PortfolioLogicLibrary {
     ) internal pure returns (int256[] memory deltas) {
         uint256 len = basket.length;
         deltas = new int256[](len);
-        
+
         for (uint256 i = 0; i < len; i++) {
             uint256 currentUsd = balances[i].mulWadDown(prices[i]);
             uint256 targetUsd = (totalUSD * basket[i].targetAllocation) / ALLOCATION_SCALE;
@@ -110,10 +110,11 @@ library PortfolioLogicLibrary {
      * @param userBalances Array of user balances for each token (extracted from mapping)
      * @return total Total portfolio value in USD
      */
-    function portfolioValueUSD(
-        TokenInfo[] memory basket,
-        uint256[] memory userBalances
-    ) internal view returns (uint256 total) {
+    function portfolioValueUSD(TokenInfo[] memory basket, uint256[] memory userBalances)
+        internal
+        view
+        returns (uint256 total)
+    {
         for (uint256 i = 0; i < basket.length; i++) {
             TokenInfo memory info = basket[i];
             uint256 bal = userBalances[i];
@@ -131,7 +132,7 @@ library PortfolioLogicLibrary {
     function getLatestPrice(address priceFeed) internal view returns (uint256 price) {
         (, int256 answer,,,) = AggregatorV3Interface(priceFeed).latestRoundData();
         if (answer <= 0) revert PriceFeedError();
-        
+
         // Normalize to 1e18
         uint8 decimals = AggregatorV3Interface(priceFeed).decimals();
         price = uint256(answer) * (10 ** (18 - decimals));
@@ -140,15 +141,11 @@ library PortfolioLogicLibrary {
     /**
      * @dev Returns true if the deviation between actual and target allocation exceeds the threshold
      * @param pct Current allocation percentage
-     * @param target Target allocation percentage  
+     * @param target Target allocation percentage
      * @param threshold Deviation threshold
      * @return exceeds Whether deviation exceeds threshold
      */
-    function exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) 
-        internal 
-        pure 
-        returns (bool exceeds) 
-    {
+    function exceedsDeviation(uint256 pct, uint256 target, uint256 threshold) internal pure returns (bool exceeds) {
         uint256 deviation = pct > target ? pct - target : target - pct;
         exceeds = deviation > threshold;
     }

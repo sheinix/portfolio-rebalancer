@@ -2,7 +2,8 @@
 pragma solidity ^0.8.19;
 
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
-import "../interfaces/IUniswapV3.sol";
+import {IUniswapV3Factory} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
+import {IUniswapV3Pool} from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 
 /**
  * @title ValidationLibrary
@@ -20,6 +21,7 @@ library ValidationLibrary {
     error InvalidPriceFeedUpdate(address feed);
     error NoPoolForToken();
     error NoLiquidityForToken();
+    error TokenNotRoutableToWETH(address token);
 
     /**
      * @dev Validates that an address is not zero
@@ -70,13 +72,9 @@ library ValidationLibrary {
      */
     function validatePriceFeed(address priceFeed) internal view {
         validateNonZeroAddress(priceFeed);
-        
+
         try AggregatorV3Interface(priceFeed).latestRoundData() returns (
-            uint80, /*roundId*/ 
-            int256 answer, 
-            uint256, /*startedAt*/ 
-            uint256 updatedAt, 
-            uint80 /*answeredInRound*/
+            uint80, /*roundId*/ int256 answer, uint256, /*startedAt*/ uint256 updatedAt, uint80 /*answeredInRound*/
         ) {
             if (answer <= 0) revert InvalidPriceFeedAnswer(priceFeed);
             if (updatedAt == 0) revert InvalidPriceFeedUpdate(priceFeed);
@@ -108,38 +106,37 @@ library ValidationLibrary {
     }
 
     /**
-     * @dev Validates Uniswap V3 pools exist and have liquidity for all token pairs
-     * @param tokens Array of token addresses
+     * @dev Validates that tokens have minimal routing connectivity via WETH
+     * @notice This can ensure at least tokens can hop to WETH and back to the token
+     * @param tokens Array of token addresses to validate
      * @param uniswapV3Factory Uniswap V3 factory address
-     * @param defaultFee Default fee tier to use
-     * @return poolAddresses 2D array of pool addresses [tokenIn][tokenOut] -> pool
+     * @param weth WETH token address for routing validation
      */
-    function validateAndGetUniswapV3Pools(
-        address[] calldata tokens,
-        address uniswapV3Factory,
-        uint24 defaultFee
-    ) internal view returns (address[][] memory poolAddresses) {
-        uint256 len = tokens.length;
-        poolAddresses = new address[][](len);
-        
+    function validateMinimalLiquidity(address[] calldata tokens, address uniswapV3Factory, address weth)
+        internal
+        view
+    {
+        validateNonZeroAddress(weth);
         IUniswapV3Factory factory = IUniswapV3Factory(uniswapV3Factory);
-        
-        for (uint256 i = 0; i < len; i++) {
-            poolAddresses[i] = new address[](len);
-            for (uint256 j = 0; j < len; j++) {
-                if (i == j) {
-                    poolAddresses[i][j] = address(0); // No pool needed for same token
-                    continue;
+
+        // Common fee tiers in Uniswap V3 (0.05%, 0.3%, 1.0%)
+        uint24[3] memory fees = [uint24(500), uint24(3_000), uint24(10_000)];
+
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == weth) continue; // WETH doesn't need routing to itself
+
+            bool hasWethPool = false;
+
+            // Check all common fee tiers for WETH pair
+            for (uint256 j = 0; j < fees.length; j++) {
+                address pool = factory.getPool(tokens[i], weth, fees[j]);
+                if (pool != address(0) && IUniswapV3Pool(pool).liquidity() > 0) {
+                    hasWethPool = true;
+                    break;
                 }
-                
-                address pool = factory.getPool(tokens[i], tokens[j], defaultFee);
-                if (pool == address(0)) revert NoPoolForToken();
-                
-                uint128 liquidity = IUniswapV3Pool(pool).liquidity();
-                if (liquidity == 0) revert NoLiquidityForToken();
-                
-                poolAddresses[i][j] = pool;
             }
+
+            if (!hasWethPool) revert TokenNotRoutableToWETH(tokens[i]);
         }
     }
-} 
+}

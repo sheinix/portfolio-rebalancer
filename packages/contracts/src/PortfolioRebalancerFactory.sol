@@ -91,6 +91,8 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         uint256[] calldata allocations,
         uint256 rebalanceThreshold,
         address uniswapV3Factory,
+        address uniswapV3SwapRouter,
+        address weth,
         uint32 gasLimit,
         uint96 linkAmount
     ) external returns (address proxy) {
@@ -101,6 +103,8 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
             allocations,
             rebalanceThreshold,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             feeBps,
             treasury,
             msg.sender

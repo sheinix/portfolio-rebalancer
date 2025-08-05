@@ -6,7 +6,7 @@ import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "./interfaces/IUniswapV3.sol";
+import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@chainlink/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol";
 
 /**
@@ -90,8 +90,8 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
     {
         require(supportedTokens[tokenIn], "Not supported");
         IERC20(tokenIn).approve(uniswapV3Router, amountIn);
-        amountOut = ISwapRouter02(uniswapV3Router).exactInputSingle(
-            ISwapRouter02.ExactInputSingleParams({
+        amountOut = ISwapRouter(uniswapV3Router).exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
                 tokenIn: tokenIn,
                 tokenOut: link,
                 fee: fee,

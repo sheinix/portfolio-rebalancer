@@ -9,10 +9,10 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "solmate/utils/FixedPointMathLib.sol";
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
 import "@chainlink/automation/AutomationCompatible.sol";
-import "./interfaces/IUniswapV3.sol";
 import "./libraries/ValidationLibrary.sol";
 import "./libraries/PortfolioLogicLibrary.sol";
 import "./libraries/PortfolioStructs.sol";
+import "./libraries/PortfolioSwapLibrary.sol";
 
 event SwapExecuted(
     address indexed user, address indexed tokenIn, address indexed tokenOut, uint256 amountIn, uint256 amountOut
@@ -36,10 +36,12 @@ contract PortfolioRebalancer is
     using ValidationLibrary for address;
     using ValidationLibrary for address[];
     using PortfolioLogicLibrary for TokenInfo[];
+    using PortfolioSwapLibrary for address;
 
     // Uniswap V3 factory address (set at initialization)
     address public uniswapV3Factory;
-
+    address public uniswapV3SwapRouter;
+    address public weth;
     // Default fee tier for V3 pools (0.3% = 3000)
     uint24 public constant DEFAULT_FEE = 3000;
 
@@ -94,6 +96,7 @@ contract PortfolioRebalancer is
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param _rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
      * @param _uniswapV3Factory Uniswap V3 factory address.
+     * @param _weth WETH token address.
      * @param _feeBps Fee in basis points (e.g., 10 = 0.1%). Immutable after initialization.
      * @param _treasury Treasury address for fee collection. Immutable after initialization.
      * @param _owner The owner of this vault (usually the user who called createVault).
@@ -104,6 +107,8 @@ contract PortfolioRebalancer is
         uint256[] calldata allocations,
         uint256 _rebalanceThreshold,
         address _uniswapV3Factory,
+        address _uniswapV3SwapRouter,
+        address _weth,
         uint256 _feeBps,
         address _treasury,
         address _owner
@@ -115,6 +120,8 @@ contract PortfolioRebalancer is
         __Ownable_init(_owner);
         __ReentrancyGuard_init();
         uniswapV3Factory = _uniswapV3Factory;
+        uniswapV3SwapRouter = _uniswapV3SwapRouter;
+        weth = _weth;
         _setBasket(tokens, priceFeeds, allocations);
         rebalanceThreshold = _rebalanceThreshold;
         feeBps = _feeBps;
@@ -144,21 +151,12 @@ contract PortfolioRebalancer is
         ValidationLibrary.validateArrayLengths(len, priceFeeds.length, allocations.length);
         uint256 sum;
         _clearBasketAndWhitelist();
-        
+
         // Validate tokens, price feeds, and pools - get pool addresses
         tokens.validateNonZeroAddresses();
         priceFeeds.validatePriceFeeds();
-        address[][] memory poolAddresses = ValidationLibrary.validateAndGetUniswapV3Pools(tokens, uniswapV3Factory, DEFAULT_FEE);
-        
-        // Cache pool addresses for all token pairs
-        for (uint256 i = 0; i < len; i++) {
-            for (uint256 j = 0; j < len; j++) {
-                if (i != j && poolAddresses[i][j] != address(0)) {
-                    swapPools[tokens[i]][tokens[j]] = poolAddresses[i][j];
-                }
-            }
-        }
-        
+        ValidationLibrary.validateMinimalLiquidity(tokens, uniswapV3Factory, weth);
+
         for (uint256 i = 0; i < len; i++) {
             basket.push(TokenInfo({token: tokens[i], priceFeed: priceFeeds[i], targetAllocation: allocations[i]}));
             tokenIndex[tokens[i]] = i;
@@ -361,14 +359,8 @@ contract PortfolioRebalancer is
             // Calculate amountToSell in tokenIn decimals
             uint256 amountToSell = tradeUsd.divWadDown(prices[sellIdx]);
             emit SwapPlanned(user, tokenIn, tokenOut, tradeUsd);
-            (, int256 amount1) = IUniswapV3Pool(pool).swap(
-                address(this),
-                true, // tokenIn -> tokenOut
-                int256(amountToSell),
-                0,
-                ""
-            );
-            emit SwapExecuted(user, tokenIn, tokenOut, amountToSell, uint256(amount1));
+            PortfolioSwapLibrary.smartSwap(uniswapV3SwapRouter, tokenIn, tokenOut, amountToSell, tradeUsd);
+            emit SwapExecuted(user, tokenIn, tokenOut, amountToSell, tradeUsd);
             // Update deltas
             sellers[s].usd -= int256(tradeUsd);
             buyers[b].usd -= int256(tradeUsd);
@@ -378,8 +370,6 @@ contract PortfolioRebalancer is
         emit Rebalanced(user);
     }
 
-
-
     /**
      * @dev Internal: returns the total USD value of a user's portfolio.
      */
@@ -387,10 +377,6 @@ contract PortfolioRebalancer is
         uint256[] memory balances = _getUserBalancesArray(user);
         return PortfolioLogicLibrary.portfolioValueUSD(basket, balances);
     }
-
-
-
-
 
     /**
      * @dev Ensures the contract has infinite approval for the token to the Uniswap V3 factory (or router/pool as needed).
@@ -402,10 +388,6 @@ contract PortfolioRebalancer is
             IERC20(token).approve(spender, type(uint256).max);
         }
     }
-
-
-
-
 
     // Internal fee transfer
     /**
