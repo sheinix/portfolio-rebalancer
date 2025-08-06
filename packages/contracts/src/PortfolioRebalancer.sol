@@ -113,9 +113,11 @@ contract PortfolioRebalancer is
         address _treasury,
         address _owner
     ) external initializer {
-        _treasury.validateTreasury();
-        _uniswapV3Factory.validateFactory();
+        _treasury.validateNonZeroAddress();
+        _uniswapV3Factory.validateNonZeroAddress();
+        _uniswapV3SwapRouter.validateNonZeroAddress();
         _owner.validateNonZeroAddress();
+        _weth.validateNonZeroAddress();
 
         __Ownable_init(_owner);
         __ReentrancyGuard_init();

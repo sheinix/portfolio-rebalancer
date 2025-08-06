@@ -59,7 +59,7 @@ contract VaultCreationTest is Test {
     uint256 public constant REBALANCE_THRESHOLD = 10_000; // 1%
     uint256 public constant FACTORY_FEE_BPS = 10; // 0.1%
     uint32 public constant GAS_LIMIT = 500_000;
-    uint96 public constant LINK_AMOUNT = 5 ether; // 5 LINK
+    uint96 public constant LINK_AMOUNT = 1 ether; // 5 LINK
 
     function setUp() public {
         console.log("Setting up VaultCreation test environment...");
@@ -510,9 +510,11 @@ contract VaultCreationTest is Test {
 
         vm.startPrank(vaultOwner);
 
-        // Expect VaultCreated event
+        // Expect VaultCreated event - only check that the first indexed parameter (user) matches
+        // Event signature: VaultCreated(address indexed user, address proxy, uint256 indexed upkeepId)
+        // Parameters: [true, false, false, false] = check 1st indexed, ignore 2nd indexed, ignore data
         vm.expectEmit(true, false, false, false);
-        emit PortfolioRebalancerFactory.VaultCreated(vaultOwner, address(0), 0); // address will be different
+        emit PortfolioRebalancerFactory.VaultCreated(vaultOwner, address(0), 0);
 
         address vaultProxy = factory.createVault(
             tokenAddresses,

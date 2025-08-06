@@ -32,22 +32,6 @@ library ValidationLibrary {
     }
 
     /**
-     * @dev Validates that treasury address is not zero
-     * @param treasury Treasury address to validate
-     */
-    function validateTreasury(address treasury) internal pure {
-        if (treasury == address(0)) revert ZeroTreasury();
-    }
-
-    /**
-     * @dev Validates that factory address is not zero
-     * @param factory Factory address to validate
-     */
-    function validateFactory(address factory) internal pure {
-        if (factory == address(0)) revert ZeroFactory();
-    }
-
-    /**
      * @dev Validates that multiple arrays have the same length
      * @param length1 Length of first array
      * @param length2 Length of second array
