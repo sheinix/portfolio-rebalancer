@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {PortfolioRebalancer} from "../src/PortfolioRebalancer.sol";
 import {PortfolioRebalancerFactory} from "../src/PortfolioRebalancerFactory.sol";
+import {PortfolioTreasury} from "../src/PortfolioTreasury.sol";
 import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
@@ -161,7 +162,13 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("\n5. Configuring permissions...");
         console.log("ProxyAdmin ownership configured to:", admin);
 
-        // 6. Validate deployment and proxy-implementation linking
+        // 6. Grant FACTORY_ROLE to factory on treasury
+        console.log("\n6. Granting FACTORY_ROLE to factory on treasury...");
+        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddress);
+        treasury.grantRole(treasury.FACTORY_ROLE(), address(factory));
+        console.log("FACTORY_ROLE granted to factory:", address(factory));
+
+        // 7. Validate deployment and proxy-implementation linking
         _validateFactoryDeployment(
             address(implementation),
             address(factoryImpl),
@@ -172,7 +179,7 @@ contract DeployPortfolioRebalancerFactory is Script {
             feeBps
         );
 
-        // 7. Update addressBook with all deployed addresses
+        // 8. Update addressBook with all deployed addresses
         console.log("\n7. Updating addressBook...");
         _updateAddressBook(
             chainId,
@@ -273,12 +280,20 @@ contract DeployPortfolioRebalancerFactory is Script {
         ProxyAdmin proxyAdminContract = ProxyAdmin(proxyAdminAddr);
         require(proxyAdminContract.owner() == expectedAdmin, "ProxyAdmin ownership not transferred");
 
+        // 4. Validate factory has FACTORY_ROLE on treasury
+        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddr);
+        require(
+            treasury.hasRole(treasury.FACTORY_ROLE(), factoryProxyAddr),
+            "Factory does not have FACTORY_ROLE on treasury"
+        );
+
         console.log("PASS: Factory Proxy -> Implementation: LINKED");
         console.log("PASS: Portfolio Implementation:", portfolioImpl);
         console.log("PASS: Treasury Address:", treasuryAddr);
         console.log("PASS: Fee BPS:", expectedFeeBps);
         console.log("PASS: Factory Admin Roles: GRANTED");
         console.log("PASS: ProxyAdmin Ownership: TRANSFERRED");
+        console.log("PASS: Factory has FACTORY_ROLE on Treasury: GRANTED");
         console.log("PASS: Factory System: READY FOR VAULT CREATION");
     }
 }

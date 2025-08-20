@@ -19,7 +19,6 @@ library ValidationLibrary {
     error InvalidPriceFeedCall(address feed);
     error InvalidPriceFeedAnswer(address feed);
     error InvalidPriceFeedUpdate(address feed);
-    error NoPoolForToken();
     error NoLiquidityForToken();
     error TokenNotRoutableToWETH(address token);
 

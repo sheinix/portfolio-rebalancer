@@ -139,8 +139,11 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
         onlyRole(FACTORY_ROLE)
         returns (uint256)
     {
+
         // Ensure we have enough LINK to fund the upkeep
         require(IERC20(link).balanceOf(address(this)) >= linkAmount, "Insufficient LINK balance");
+
+        IERC20(link).approve(address(automationRegistry), linkAmount);
 
         // Register the upkeep with Chainlink Automation Registry
         uint256 upkeepId = automationRegistry.registerUpkeep(
@@ -154,8 +157,6 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
             "" // offchain config (empty)
         );
 
-        // Add funds to the upkeep
-        IERC20(link).approve(address(automationRegistry), linkAmount);
         automationRegistry.addFunds(upkeepId, linkAmount);
 
         // Store the mapping of vault to upkeep ID

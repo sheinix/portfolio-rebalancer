@@ -202,13 +202,13 @@ contract PortfolioRebalancerTest is Test {
 
     function test_initialize_Revert_ZeroTreasury() public {
         // Try to initialize with zero treasury address
-        vm.expectRevert(ValidationLibrary.ZeroTreasury.selector);
+        vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
         rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, uniswapV3Factory, uniswapV3SwapRouter, weth, 10, address(0), owner);
     }
 
     function test_initialize_Revert_ZeroFactory() public {
         // Try to initialize with zero factory address
-        vm.expectRevert(ValidationLibrary.ZeroFactory.selector);
+        vm.expectRevert(ValidationLibrary.ZeroAddress.selector);
         rebalancer.initialize(tokenAddrs, priceFeeds, allocations, 10_000, address(0), uniswapV3SwapRouter, weth, 10, treasury, owner);
     }
 
@@ -249,7 +249,7 @@ contract PortfolioRebalancerTest is Test {
         rebalancer.setBasket(tooMany, feeds, allocs);
     }
 
-    function test_setBasket_Revert_NoPoolForToken() public {
+    function test_setBasket_Revert_TokenNotRoutableToWETH() public {
         _setupInitializedContract();
 
         // Override mock so the Uniswap factory returns address(0) for getPool calls
@@ -257,11 +257,18 @@ contract PortfolioRebalancerTest is Test {
             uniswapV3Factory,
             0,
             abi.encodeWithSignature("getPool(address,address,uint24)"),
-            abi.encode(address(0)) // Return address(0) to simulate no pool
+            abi.encode(address(0x123)) // Return address(0) to simulate no pool
+        );
+
+        vm.mockCall(
+            address(0x123),
+            0,
+            abi.encodeWithSignature("liquidity()"),
+            abi.encode(uint128(0))
         );
 
         vm.prank(owner);
-        vm.expectRevert(ValidationLibrary.NoPoolForToken.selector);
+        vm.expectRevert(abi.encodeWithSelector(ValidationLibrary.TokenNotRoutableToWETH.selector, tokenAddrs[0]));
         rebalancer.setBasket(tokenAddrs, priceFeeds, allocations);
     }
 
