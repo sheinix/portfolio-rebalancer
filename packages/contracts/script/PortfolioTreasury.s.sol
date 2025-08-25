@@ -83,6 +83,56 @@ contract DeployPortfolioTreasury is Script {
     }
 
     /**
+     * @notice Upgrade existing treasury proxy with new implementation
+     * @return newImplementationAddress The address of the new implementation
+     */
+    function upgradeExistingProxy() public returns (address newImplementationAddress) {
+        uint256 chainId = block.chainid;
+
+        // Read existing proxy address from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        console.log("Reading existing treasury proxy from:", filename);
+        string memory json = vm.readFile(filename);
+
+        address existingProxy = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
+        address existingImplementation = vm.parseJsonAddress(json, ".portfolioRebalancer.treasuryImplementation");
+        
+        console.log("Existing Treasury Proxy:", existingProxy);
+        console.log("Existing Treasury Implementation:", existingImplementation);
+
+        // Deploy new implementation
+        PortfolioTreasury newImplementation = new PortfolioTreasury();
+        console.log("New PortfolioTreasury implementation deployed at:", address(newImplementation));
+
+        // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)
+        vm.startBroadcast();
+        // For UUPS upgradeable contracts, we need to call upgradeToAndCall through the proxy's fallback
+        // The proxy will delegate the call to the implementation's upgradeToAndCall function
+        (bool success, ) = existingProxy.call(
+            abi.encodeWithSignature(
+                "upgradeToAndCall(address,bytes)",
+                address(newImplementation),
+                "" // No initialization data needed for upgrade
+            )
+        );
+        require(success, "Upgrade failed");
+        vm.stopBroadcast();
+
+        // Update addressBook with new implementation
+        _updateAddressBook(chainId, address(newImplementation), existingProxy);
+
+        console.log("\n=== Treasury Upgrade Summary ===");
+        console.log("1. Chain ID:", chainId);
+        console.log("2. Old Implementation:", existingImplementation);
+        console.log("3. New Implementation:", address(newImplementation));
+        console.log("4. Proxy (unchanged):", existingProxy);
+        console.log("5. Upgrade: COMPLETED");
+        console.log("6. AddressBook updated");
+
+        return address(newImplementation);
+    }
+
+    /**
      * @dev Core deployment logic shared by all deployment functions
      * @param chainId Chain ID for addressBook updates
      * @param linkToken LINK token address

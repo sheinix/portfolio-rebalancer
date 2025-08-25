@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@chainlink/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol";
+import {ValidationLibrary} from "./libraries/ValidationLibrary.sol";
 
 /**
  * @title PortfolioTreasury
@@ -16,7 +17,8 @@ import "@chainlink/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol";
  */
 contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
     using SafeERC20 for IERC20;
-
+    using ValidationLibrary for address;
+    
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant SWAPER_ROLE = keccak256("SWAPER_ROLE");
     bytes32 public constant FUNDER_ROLE = keccak256("FUNDER_ROLE");
@@ -132,31 +134,50 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @param checkData ABI-encoded data for checkUpkeep function
      * @param gasLimit Gas limit for performUpkeep function
      * @param linkAmount Amount of LINK to fund the upkeep
+     * @param admin The address that will be the admin of the upkeep
      * @return upkeepId The ID of the registered upkeep
      */
-    function registerAndFundUpkeep(address upkeepContract, bytes calldata checkData, uint32 gasLimit, uint96 linkAmount)
+    function registerAndFundUpkeep(
+        address upkeepContract, 
+        bytes calldata checkData, 
+        uint32 gasLimit, 
+        uint96 linkAmount,
+        address admin
+    )
         external
         onlyRole(FACTORY_ROLE)
         returns (uint256)
     {
+        ValidationLibrary.validateNonZeroAddress(admin);
+        ValidationLibrary.validateNonZeroAddress(upkeepContract);
 
+        // Ensure link amount is reasonable (at least 0.1 LINK)
+        require(linkAmount >= 0.1 ether, "Link amount too low");
         // Ensure we have enough LINK to fund the upkeep
         require(IERC20(link).balanceOf(address(this)) >= linkAmount, "Insufficient LINK balance");
+        // Ensure gas limit is reasonable (between 50k and 500k for most networks)
+        require(gasLimit >= 50_000 && gasLimit <= 500_000, "Invalid gas limit");
 
+        
         IERC20(link).approve(address(automationRegistry), linkAmount);
 
+        // Prepare checkData - if empty, use a default format
+        bytes memory finalCheckData = checkData.length > 0 ? checkData : abi.encode(upkeepContract);
+        
         // Register the upkeep with Chainlink Automation Registry
         uint256 upkeepId = automationRegistry.registerUpkeep(
             upkeepContract, // target contract
             gasLimit, // gas limit for performUpkeep
-            address(this), // admin (this treasury contract)
+            admin, // admin (vault owner or factory)
             0, // trigger type (0 = conditional)
             link, // billing token (LINK)
-            checkData, // check data
+            finalCheckData, // check data
             "", // trigger config (empty for conditional)
             "" // offchain config (empty)
         );
 
+
+        // Fund the upkeep
         automationRegistry.addFunds(upkeepId, linkAmount);
 
         // Store the mapping of vault to upkeep ID

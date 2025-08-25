@@ -124,9 +124,10 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         // Register vault with Chainlink Automation via treasury
         uint256 upkeepId = PortfolioTreasury(treasury).registerAndFundUpkeep(
             proxy,
-            abi.encodePacked(proxy), // Simple checkData encoding vault address
+            abi.encode(proxy),
             gasLimit,
-            linkAmount
+            linkAmount,
+            msg.sender // admin: vault owner
         );
 
         emit VaultCreated(msg.sender, proxy, upkeepId);

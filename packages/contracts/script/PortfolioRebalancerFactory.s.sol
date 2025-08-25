@@ -95,6 +95,56 @@ contract DeployPortfolioRebalancerFactory is Script {
     }
 
     /**
+     * @notice Upgrade existing factory proxy with new implementation
+     * @return newImplementationAddress The address of the new implementation
+     */
+    function upgradeExistingProxy() public returns (address newImplementationAddress) {
+        uint256 chainId = block.chainid;
+
+        // Read existing proxy address from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        console.log("Reading existing factory proxy from:", filename);
+        string memory json = vm.readFile(filename);
+
+        address existingProxy = vm.parseJsonAddress(json, ".portfolioRebalancer.factory");
+        address existingImplementation = vm.parseJsonAddress(json, ".portfolioRebalancer.factoryImplementation");
+        
+        console.log("Existing Factory Proxy:", existingProxy);
+        console.log("Existing Factory Implementation:", existingImplementation);
+
+        // Deploy new implementation
+        PortfolioRebalancerFactory newImplementation = new PortfolioRebalancerFactory();
+        console.log("New PortfolioRebalancerFactory implementation deployed at:", address(newImplementation));
+
+        // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)
+        vm.startBroadcast();
+        // For UUPS upgradeable contracts, we need to call upgradeToAndCall through the proxy's fallback
+        // The proxy will delegate the call to the implementation's upgradeToAndCall function
+        (bool success, ) = existingProxy.call(
+            abi.encodeWithSignature(
+                "upgradeToAndCall(address,bytes)",
+                address(newImplementation),
+                "" // No initialization data needed for upgrade
+            )
+        );
+        require(success, "Upgrade failed");
+        vm.stopBroadcast();
+
+        // Update addressBook with new implementation
+        _updateAddressBookForUpgrade(chainId, address(newImplementation), existingProxy);
+
+        console.log("\n=== Factory Upgrade Summary ===");
+        console.log("1. Chain ID:", chainId);
+        console.log("2. Old Implementation:", existingImplementation);
+        console.log("3. New Implementation:", address(newImplementation));
+        console.log("4. Proxy (unchanged):", existingProxy);
+        console.log("5. Upgrade: COMPLETED");
+        console.log("6. AddressBook updated");
+
+        return address(newImplementation);
+    }
+
+    /**
      * @dev Core factory deployment logic with default fee
      * @param chainId Chain ID for addressBook updates
      * @param treasuryAddress Treasury proxy address
@@ -168,7 +218,7 @@ contract DeployPortfolioRebalancerFactory is Script {
         treasury.grantRole(treasury.FACTORY_ROLE(), address(factory));
         console.log("FACTORY_ROLE granted to factory:", address(factory));
 
-        // 7. Validate deployment and proxy-implementation linking
+        // 8. Validate deployment and proxy-implementation linking
         _validateFactoryDeployment(
             address(implementation),
             address(factoryImpl),
@@ -179,8 +229,8 @@ contract DeployPortfolioRebalancerFactory is Script {
             feeBps
         );
 
-        // 8. Update addressBook with all deployed addresses
-        console.log("\n7. Updating addressBook...");
+        // 9. Update addressBook with all deployed addresses
+        console.log("\n8. Updating addressBook...");
         _updateAddressBook(
             chainId,
             address(implementation), // portfolio implementation
@@ -189,7 +239,7 @@ contract DeployPortfolioRebalancerFactory is Script {
             address(proxyAdmin) // proxy admin
         );
 
-        // 8. Log deployment summary
+        // 9. Log deployment summary
         console.log("\n=== Factory System Deployment Summary ===");
         console.log("1. Chain ID:", chainId);
         console.log("2. Portfolio Implementation:", address(implementation));
@@ -241,6 +291,27 @@ contract DeployPortfolioRebalancerFactory is Script {
         console.log("ProxyAdmin:", proxyAdminAddr);
         console.log("Deployment Block:", block.number);
         console.log("Deployment Timestamp:", block.timestamp);
+    }
+
+    /**
+     * @dev Updates the addressBook file with factory system addresses for upgrades
+     * @param chainId Chain ID for the addressBook file
+     * @param newImplementation The new implementation address
+     * @param existingProxy The existing factory proxy address
+     */
+    function _updateAddressBookForUpgrade(
+        uint256 chainId,
+        address newImplementation,
+        address existingProxy
+    ) internal {
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+
+        // Update factory implementation
+        vm.writeJson(vm.toString(newImplementation), filename, ".portfolioRebalancer.factoryImplementation");
+
+        console.log("Updated addressBook file for upgrade:", filename);
+        console.log("New Implementation:", newImplementation);
+        console.log("Existing Proxy:", existingProxy);
     }
 
     /**

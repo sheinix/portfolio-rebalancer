@@ -25,13 +25,11 @@
     "swapRouter": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
   },
   "portfolioRebalancer": {
-    "implementation": "0x44Cb56F3840fF5d403C7EfB90594973fBC7213E3",
-    "factoryImplementation": "0xc96D8B7AD1cd8747ee03087b35ef6D904712F011",
-    "factory": "0xA7245c8CdeEEC7d032D428D0d01E4e70280673ec",
-    "treasury": "0x04947e8a60614ce3eD6E3a7fc0C98a7Dc300AC11",
-    "treasuryImplementation": "0x9f7CE84fA0550c3B03FF95D587Eb6F8af1F5e544",
-    "proxyAdmin": "0x270E58ecFe96176e15Edb1a13D57ee2E50Df355D",
-    "deploymentBlock": 9024568,
-    "deploymentTimestamp": 1755683064
+    "implementation": "0x6A33B8f359eAc3051AEC51420037086E05F67894",
+    "factoryImplementation": "0x25c51EC64ea229353d30a0BB411566ecBaEC9fB4",
+    "factory": "0x984D14c9FFf13C89f8e78b85610549324F96b2c4",
+    "treasury": "0x3540CdD5adc6Bf3e775C5852468b5391E31434cC",
+    "treasuryImplementation": "0x1176096A0B025B72E18ff808e74E7312cC3c25C4",
+    "proxyAdmin": "0x9Ed501f0496021D1c5a83dC6B91F943eba2aa421"
   }
 }
