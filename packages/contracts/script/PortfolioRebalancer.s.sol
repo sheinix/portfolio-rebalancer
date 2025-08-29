@@ -94,16 +94,16 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Deployer:", msg.sender);
         console.log("Treasury Admin:", treasuryAdmin);
 
-        // Read automation registry from addressBook
+        // Read automation registrar from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress =
-            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistrar, treasuryAdmin);
         console.log("!! Treasury deployment completed");
 
         // 2. Deploy Factory system (reads treasury address from addressBook)
@@ -140,16 +140,16 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Factory Admin:", factoryAdmin);
         console.log("Fee BPS:", feeBps);
 
-        // Read automation registry from addressBook
+        // Read automation registrar from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress =
-            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistrar, treasuryAdmin);
         console.log("!! Treasury deployment completed");
 
         // 2. Deploy Factory system with custom parameters

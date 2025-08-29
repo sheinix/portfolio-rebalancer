@@ -56,9 +56,6 @@ contract PortfolioRebalancer is
     // token address => whitelisted
     mapping(address => bool) public isWhitelisted;
 
-    // user => token => balance
-    mapping(address => mapping(address => uint256)) public userBalances;
-
     // tokenA => tokenB => pool address
     mapping(address => mapping(address => address)) public swapPools;
 
@@ -215,12 +212,11 @@ contract PortfolioRebalancer is
     function deposit(address token, uint256 amount, bool autoRebalance) external nonReentrant onlyOwner {
         if (!isWhitelisted[token]) revert NotWhitelisted();
         if (amount == 0) revert InvalidAmount();
-        userBalances[msg.sender][token] += amount;
         IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
         _ensureSwapApproval(token); // Infinite-approve for Uniswap V3 swaps
         if (autoRebalance) {
-            (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
-            _rebalance(msg.sender, snapshot);
+            (, PortfolioSnapshot memory snapshot) = _needsRebalance();
+            _rebalance(owner(), snapshot);
         }
         emit Deposit(msg.sender, token, amount);
     }
@@ -242,13 +238,12 @@ contract PortfolioRebalancer is
     function withdraw(address token, uint256 amount, bool autoRebalance) external nonReentrant onlyOwner {
         if (!isWhitelisted[token]) revert NotWhitelisted();
         if (amount == 0) revert InvalidAmount();
-        uint256 bal = userBalances[msg.sender][token];
+        uint256 bal = IERC20(token).balanceOf(address(this));
         if (bal < amount) revert NotEnoughBalance();
-        userBalances[msg.sender][token] = bal - amount;
         IERC20(token).safeTransfer(msg.sender, amount);
         if (autoRebalance) {
-            (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
-            _rebalance(msg.sender, snapshot);
+            (, PortfolioSnapshot memory snapshot) = _needsRebalance();
+            _rebalance(owner(), snapshot);
         }
         emit Withdraw(msg.sender, token, amount);
     }
@@ -258,17 +253,17 @@ contract PortfolioRebalancer is
      * @notice Manually rebalance your vault to match target allocations using Uniswap V3. Only callable by the vault owner.
      */
     function rebalance() external nonReentrant onlyOwner {
-        (, PortfolioSnapshot memory snapshot) = _needsRebalance(msg.sender);
-        _rebalance(msg.sender, snapshot);
+        (, PortfolioSnapshot memory snapshot) = _needsRebalance();
+        _rebalance(owner(), snapshot);
     }
 
     /**
      * @notice Chainlink Keeper checkUpkeep: checks if any user's portfolio needs rebalancing.
-     * @dev For demo: only checks msg.sender (in production, would need off-chain user list or event-based triggers).
+     * @dev For demo: only checks the vault owner (in production, would need off-chain user list or event-based triggers).
      */
     function checkUpkeep(bytes calldata) external view override returns (bool upkeepNeeded, bytes memory performData) {
-        address user = msg.sender;
-        (bool needs, PortfolioSnapshot memory snapshot) = _needsRebalance(user);
+        address user = owner(); // Check the vault owner, not msg.sender
+        (bool needs, PortfolioSnapshot memory snapshot) = _needsRebalance();
         if (needs) {
             upkeepNeeded = true;
             performData = abi.encode(user, snapshot);
@@ -285,13 +280,13 @@ contract PortfolioRebalancer is
     }
 
     /**
-     * @dev Helper function to extract user balances into an array
+     * @dev Helper function to extract contract balances into an array
      */
-    function _getUserBalancesArray(address user) internal view returns (uint256[] memory balances) {
+    function _getContractBalancesArray() internal view returns (uint256[] memory balances) {
         uint256 len = basket.length;
         balances = new uint256[](len);
         for (uint256 i = 0; i < len; i++) {
-            balances[i] = userBalances[user][basket[i].token];
+            balances[i] = IERC20(basket[i].token).balanceOf(address(this));
         }
     }
 
@@ -299,8 +294,8 @@ contract PortfolioRebalancer is
      * @dev Checks if user's portfolio deviates from target allocations beyond threshold.
      *      Returns (needsRebalance, snapshot) for efficient reuse.
      */
-    function _needsRebalance(address user) internal view returns (bool, PortfolioSnapshot memory) {
-        uint256[] memory balances = _getUserBalancesArray(user);
+    function _needsRebalance() internal view returns (bool, PortfolioSnapshot memory) {
+        uint256[] memory balances = _getContractBalancesArray();
         return PortfolioLogicLibrary.needsRebalance(basket, balances, rebalanceThreshold);
     }
 
@@ -373,10 +368,10 @@ contract PortfolioRebalancer is
     }
 
     /**
-     * @dev Internal: returns the total USD value of a user's portfolio.
+     * @dev Internal: returns the total USD value of the contract's portfolio.
      */
-    function _portfolioValueUSD(address user) internal view returns (uint256 total) {
-        uint256[] memory balances = _getUserBalancesArray(user);
+    function _portfolioValueUSD() internal view returns (uint256 total) {
+        uint256[] memory balances = _getContractBalancesArray();
         return PortfolioLogicLibrary.portfolioValueUSD(basket, balances);
     }
 
@@ -413,18 +408,14 @@ contract PortfolioRebalancer is
     }
 
     /**
-     * @notice Returns a user's balances for all basket tokens.
-     * @param user The user address.
+     * @notice Returns the contract's balances for all basket tokens.
      */
-    function getUserBalances(address user) external view returns (uint256[] memory balances) {
-        balances = new uint256[](basket.length);
-        for (uint256 i = 0; i < basket.length; i++) {
-            balances[i] = userBalances[user][basket[i].token];
-        }
+    function getContractBalances() external view returns (uint256[] memory balances) {
+        return _getContractBalancesArray();
     }
 
     /**
-     * @notice Returns the Uniswap V4 factory address.
+     * @notice Returns the Uniswap V3 factory address.
      */
     function getUniswapV3Factory() external view returns (address) {
         return uniswapV3Factory;

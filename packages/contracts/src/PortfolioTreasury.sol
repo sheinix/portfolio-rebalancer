@@ -7,7 +7,7 @@ import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ISwapRouter} from "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@chainlink/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol";
+import "./interfaces/IAutomationRegistrar.sol";
 import {ValidationLibrary} from "./libraries/ValidationLibrary.sol";
 
 /**
@@ -29,7 +29,7 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
 
     address public link;
     address public uniswapV3Router;
-    IAutomationRegistryMaster2_3 public automationRegistry;
+    IAutomationRegistrar public automationRegistrar;
 
     event SupportedTokenAdded(address token);
     event UniswapV3RouterChanged(address newRouter);
@@ -39,13 +39,13 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
     event UpkeepRegistered(address indexed vault, uint256 indexed upkeepId, uint96 linkAmount);
 
     /**
-     * @notice Initialize treasury with LINK address, Uniswap V3 router, automation registry, and admin.
+     * @notice Initialize treasury with LINK address, Uniswap V3 router, automation registrar, and admin.
      * @param _link LINK token address
      * @param _uniswapV3Router Uniswap V3 router address
-     * @param _automationRegistry Chainlink Automation Registry address
+     * @param _automationRegistrar Chainlink Automation Registrar address
      * @param admin Admin address
      */
-    function initialize(address _link, address _uniswapV3Router, address payable _automationRegistry, address admin)
+    function initialize(address _link, address _uniswapV3Router, address payable _automationRegistrar, address admin)
         external
         initializer
     {
@@ -54,7 +54,7 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
 
         link = _link;
         uniswapV3Router = _uniswapV3Router;
-        automationRegistry = IAutomationRegistryMaster2_3(_automationRegistry);
+        automationRegistrar = IAutomationRegistrar(_automationRegistrar);
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
     }
@@ -135,6 +135,8 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @param gasLimit Gas limit for performUpkeep function
      * @param linkAmount Amount of LINK to fund the upkeep
      * @param admin The address that will be the admin of the upkeep
+     * @param name Name of the upkeep
+     * @param encryptedEmail Encrypted email for the upkeep contact
      * @return upkeepId The ID of the registered upkeep
      */
     function registerAndFundUpkeep(
@@ -142,7 +144,9 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
         bytes calldata checkData, 
         uint32 gasLimit, 
         uint96 linkAmount,
-        address admin
+        address admin,
+        string calldata name,
+        bytes calldata encryptedEmail
     )
         external
         onlyRole(FACTORY_ROLE)
@@ -158,27 +162,26 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
         // Ensure gas limit is reasonable (between 50k and 500k for most networks)
         require(gasLimit >= 50_000 && gasLimit <= 500_000, "Invalid gas limit");
 
+        // Approve LINK for the registrar
+        IERC20(link).approve(address(automationRegistrar), linkAmount);
         
-        IERC20(link).approve(address(automationRegistry), linkAmount);
+        // Create RegistrationParams struct
+        IAutomationRegistrar.RegistrationParams memory params = IAutomationRegistrar.RegistrationParams({
+            upkeepContract: upkeepContract,
+            amount: linkAmount,
+            adminAddress: admin,
+            gasLimit: gasLimit,
+            triggerType: 0, // 0 = conditional
+            billingToken: IERC20(link),
+            name: name,
+            encryptedEmail: encryptedEmail,
+            checkData: checkData,
+            triggerConfig: "", // empty for conditional
+            offchainConfig: "" // empty
+        });
 
-        // Prepare checkData - if empty, use a default format
-        bytes memory finalCheckData = checkData.length > 0 ? checkData : abi.encode(upkeepContract);
-        
-        // Register the upkeep with Chainlink Automation Registry
-        uint256 upkeepId = automationRegistry.registerUpkeep(
-            upkeepContract, // target contract
-            gasLimit, // gas limit for performUpkeep
-            admin, // admin (vault owner or factory)
-            0, // trigger type (0 = conditional)
-            link, // billing token (LINK)
-            finalCheckData, // check data
-            "", // trigger config (empty for conditional)
-            "" // offchain config (empty)
-        );
-
-
-        // Fund the upkeep
-        automationRegistry.addFunds(upkeepId, linkAmount);
+        // Register the upkeep with Chainlink Automation Registrar
+        uint256 upkeepId = automationRegistrar.registerUpkeep(params);
 
         // Store the mapping of vault to upkeep ID
         upkeepOf[upkeepContract] = upkeepId;

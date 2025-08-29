@@ -16,6 +16,7 @@
     "priceFeedUSDT": "0x14866185B1962B63C3Ea9E03Bc1da838bab34C19",
     "priceFeedWBTC": "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
     "priceFeedLINK": "0xc59E3633BAAC79493d908e63626716e204A45EdF",
+    "automationRegistrar": "0xb0E49c5D0d05cbc241d68c05BC5BA1d1B7B72976",
     "automationRegistry": "0x86EFBD0b6736Bed994962f9797049422A3A8E8Ad"
   },
   "uniswap": {
@@ -25,11 +26,11 @@
     "swapRouter": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
   },
   "portfolioRebalancer": {
-    "implementation": "0x6A33B8f359eAc3051AEC51420037086E05F67894",
-    "factoryImplementation": "0x25c51EC64ea229353d30a0BB411566ecBaEC9fB4",
-    "factory": "0x984D14c9FFf13C89f8e78b85610549324F96b2c4",
-    "treasury": "0x3540CdD5adc6Bf3e775C5852468b5391E31434cC",
-    "treasuryImplementation": "0x1176096A0B025B72E18ff808e74E7312cC3c25C4",
-    "proxyAdmin": "0x9Ed501f0496021D1c5a83dC6B91F943eba2aa421"
+    "implementation": "0x83907Ca2d2C4fc4550eDB8c31d2303149E76d4C1",
+    "factoryImplementation": "0x3c9f646D2f3Ce08D9A74eD45B055c6910839B8c6",
+    "factory": "0x5A99b4608B2e8AA74b40ffcCd0Bb2Fdecc198b0d",
+    "treasury": "0xa088537021b15A8eEB877fD976a865090E042E31",
+    "treasuryImplementation": "0x583B4315fE809E773EE9073FE8F8AECC81ad4205",
+    "proxyAdmin": "0x2cC1044269a170aD2d3E9C497D11D4471124a3B2"
   }
 }

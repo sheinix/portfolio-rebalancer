@@ -518,7 +518,7 @@ contract PortfolioRebalancerTest is Test {
         uint256 depositAmount = 1000 ether;
         address depositToken = address(tokens[0]);
         uint256 initialContractBalance = IERC20(depositToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(owner, depositToken);
+        uint256 initialUserBalance = IERC20(depositToken).balanceOf(address(owner));
 
         // Give owner some tokens to deposit
         tokens[0].transfer(owner, depositAmount);
@@ -533,7 +533,7 @@ contract PortfolioRebalancerTest is Test {
         vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(owner, depositToken), initialUserBalance + depositAmount);
+        assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialUserBalance + depositAmount);
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
 
         // Check swap approval was set (should be max uint256)
@@ -566,7 +566,7 @@ contract PortfolioRebalancerTest is Test {
         uint256 depositAmount = 1000 ether;
         address depositToken = address(tokens[0]);
         uint256 initialContractBalance = IERC20(depositToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(owner, depositToken);
+        uint256 initialUserBalance = IERC20(depositToken).balanceOf(address(owner));
 
         // Give owner some tokens to deposit
         tokens[0].transfer(owner, depositAmount);
@@ -581,7 +581,7 @@ contract PortfolioRebalancerTest is Test {
         vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(owner, depositToken), initialUserBalance + depositAmount);
+        assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialUserBalance + depositAmount);
         assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), initialContractBalance + depositAmount);
 
         // Check swap approval was set (should be max uint256)
@@ -631,7 +631,7 @@ contract PortfolioRebalancerTest is Test {
         assertEq(allowanceAfterSecond, type(uint256).max);
 
         // Verify total user balance
-        assertEq(rebalancer.userBalances(owner, depositToken), depositAmount * 2);
+        assertEq(IERC20(depositToken).balanceOf(address(rebalancer)), depositAmount * 2);
     }
 
     // --- withdraw Validation Tests ---
@@ -714,7 +714,6 @@ contract PortfolioRebalancerTest is Test {
 
         // Get initial balances
         uint256 initialContractBalance = IERC20(withdrawToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
         uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(owner);
 
         // Record logs to check if Withdraw event was emitted
@@ -724,7 +723,6 @@ contract PortfolioRebalancerTest is Test {
         vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + withdrawAmount);
 
@@ -765,7 +763,6 @@ contract PortfolioRebalancerTest is Test {
 
         // Get initial balances
         uint256 initialContractBalance = IERC20(withdrawToken).balanceOf(address(rebalancer));
-        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
         uint256 initialOwnerBalance = IERC20(withdrawToken).balanceOf(owner);
 
         // Record logs to check if Withdraw event was emitted
@@ -775,7 +772,6 @@ contract PortfolioRebalancerTest is Test {
         vm.stopPrank();
 
         // Verify state changes
-        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - withdrawAmount);
         assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + withdrawAmount);
 
@@ -821,7 +817,7 @@ contract PortfolioRebalancerTest is Test {
         vm.stopPrank();
 
         // Verify complete withdrawal
-        assertEq(rebalancer.userBalances(owner, withdrawToken), 0);
+        assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), 0);
         assertEq(IERC20(withdrawToken).balanceOf(address(rebalancer)), initialContractBalance - depositAmount);
         assertEq(IERC20(withdrawToken).balanceOf(owner), initialOwnerBalance + depositAmount);
     }
@@ -840,19 +836,25 @@ contract PortfolioRebalancerTest is Test {
         tokens[0].approve(address(rebalancer), depositAmount);
         rebalancer.deposit(withdrawToken, depositAmount, false);
 
-        uint256 initialUserBalance = rebalancer.userBalances(owner, withdrawToken);
+        // Get initial contract balance
+        uint256[] memory initialBalances = rebalancer.getContractBalances();
+        uint256 tokenIndex = rebalancer.tokenIndex(withdrawToken);
+        uint256 initialContractBalance = initialBalances[tokenIndex];
 
         // First withdrawal
         rebalancer.withdraw(withdrawToken, firstWithdraw, false);
-        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - firstWithdraw);
+        uint256[] memory balancesAfterFirst = rebalancer.getContractBalances();
+        assertEq(balancesAfterFirst[tokenIndex], initialContractBalance - firstWithdraw);
 
         // Second withdrawal
         rebalancer.withdraw(withdrawToken, secondWithdraw, false);
-        assertEq(rebalancer.userBalances(owner, withdrawToken), initialUserBalance - firstWithdraw - secondWithdraw);
+        uint256[] memory balancesAfterSecond = rebalancer.getContractBalances();
+        assertEq(balancesAfterSecond[tokenIndex], initialContractBalance - firstWithdraw - secondWithdraw);
 
         // Verify remaining balance
         uint256 expectedRemaining = depositAmount - firstWithdraw - secondWithdraw;
-        assertEq(rebalancer.userBalances(owner, withdrawToken), expectedRemaining);
+        uint256[] memory finalBalances = rebalancer.getContractBalances();
+        assertEq(finalBalances[tokenIndex], expectedRemaining);
     }
     // --- Internal Function Tests ---
     // Using PortfolioRebalancerTestable to test internal functions:

@@ -97,6 +97,7 @@ upgrade_treasury() {
     forge script script/PortfolioTreasury.s.sol:DeployPortfolioTreasury \
         --sig "upgradeExistingProxy()" \
         --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
         --broadcast \
         --verify \
         --etherscan-api-key "$api_key"
@@ -117,6 +118,7 @@ upgrade_factory() {
     forge script script/PortfolioRebalancerFactory.s.sol:DeployPortfolioRebalancerFactory \
         --sig "upgradeExistingProxy()" \
         --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
         --broadcast \
         --verify \
         --etherscan-api-key "$api_key"
@@ -137,6 +139,7 @@ upgrade_portfolio_rebalancer() {
     forge script script/PortfolioRebalancer.s.sol:DeployPortfolioRebalancer \
         --sig "upgradeExistingProxy()" \
         --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
         --broadcast \
         --verify \
         --etherscan-api-key "$api_key"

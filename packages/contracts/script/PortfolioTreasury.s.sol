@@ -25,25 +25,25 @@ contract DeployPortfolioTreasury is Script {
 
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
         address uniswapV3Router = vm.parseJsonAddress(json, ".uniswap.router");
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
         address admin = tx.origin; // Use actual deployer EOA, not script contract
 
         console.log("LINK Token from addressBook:", linkToken);
         console.log("Uniswap V3 Router from addressBook:", uniswapV3Router);
-        console.log("Automation Registry from addressBook:", automationRegistry);
+        console.log("Automation Registrar from addressBook:", automationRegistrar);
 
-        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistrar, admin);
     }
 
     /**
      * @notice Deploy treasury with custom parameters (override addressBook)
      * @param linkToken LINK token address
      * @param uniswapV3Router Uniswap V3 router address
-     * @param automationRegistry Chainlink Automation Registry address
+     * @param automationRegistrar Chainlink Automation Registrar address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
      */
-    function deployWithParams(address linkToken, address uniswapV3Router, address automationRegistry, address admin)
+    function deployWithParams(address linkToken, address uniswapV3Router, address automationRegistrar, address admin)
         public
         returns (address treasuryAddress)
     {
@@ -52,10 +52,10 @@ contract DeployPortfolioTreasury is Script {
         console.log("Deploying with custom parameters (bypassing addressBook)");
         console.log("LINK Token:", linkToken);
         console.log("Uniswap V3 Router:", uniswapV3Router);
-        console.log("Automation Registry:", automationRegistry);
+        console.log("Automation Registrar:", automationRegistrar);
         console.log("Admin:", admin);
 
-        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistrar, admin);
     }
 
     /**
@@ -71,15 +71,25 @@ contract DeployPortfolioTreasury is Script {
 
         address linkToken = vm.parseJsonAddress(json, ".coins.LINK");
         address uniswapV3Router = vm.parseJsonAddress(json, ".uniswap.router");
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
         address admin = tx.origin; // Use actual deployer EOA, not script contract
 
         console.log("Target Chain ID:", chainId);
         console.log("LINK Token:", linkToken);
-        console.log("Uniswap V3 Router:", uniswapV3Router);
-        console.log("Automation Registry:", automationRegistry);
+        console.log("Uniswap V3Router:", uniswapV3Router);
+        console.log("Automation Registrar:", automationRegistrar);
 
-        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistry, admin);
+        return _deployTreasuryCore(chainId, linkToken, uniswapV3Router, automationRegistrar, admin);
+    }
+
+    /**
+     * @notice Test function to verify which account is being used
+     */
+    function testAccount() public view {
+        console.log("=== Account Test ===");
+        console.log("tx.origin:", tx.origin);
+        console.log("msg.sender:", msg.sender);
+        console.log("block.chainid:", block.chainid);
     }
 
     /**
@@ -92,6 +102,9 @@ contract DeployPortfolioTreasury is Script {
         // Read existing proxy address from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         console.log("Reading existing treasury proxy from:", filename);
+        console.log("Using TX Origin:", tx.origin);
+        console.log("Using msg.sender:", msg.sender);
+        
         string memory json = vm.readFile(filename);
 
         address existingProxy = vm.parseJsonAddress(json, ".portfolioRebalancer.treasury");
@@ -106,6 +119,8 @@ contract DeployPortfolioTreasury is Script {
 
         // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)
         vm.startBroadcast();
+        console.log("Broadcasting with account:", tx.origin);
+        
         // For UUPS upgradeable contracts, we need to call upgradeToAndCall through the proxy's fallback
         // The proxy will delegate the call to the implementation's upgradeToAndCall function
         (bool success, ) = existingProxy.call(
@@ -137,7 +152,7 @@ contract DeployPortfolioTreasury is Script {
      * @param chainId Chain ID for addressBook updates
      * @param linkToken LINK token address
      * @param uniswapV3Router Uniswap V3 router address
-     * @param automationRegistry Chainlink Automation Registry address
+     * @param automationRegistrar Chainlink Automation Registrar address
      * @param admin Admin address
      * @return treasuryAddress The deployed treasury proxy address
      */
@@ -145,7 +160,7 @@ contract DeployPortfolioTreasury is Script {
         uint256 chainId,
         address linkToken,
         address uniswapV3Router,
-        address automationRegistry,
+        address automationRegistrar,
         address admin
     ) internal returns (address treasuryAddress) {
         vm.startBroadcast();
@@ -160,7 +175,7 @@ contract DeployPortfolioTreasury is Script {
 
         // 2. Prepare initialization data
         bytes memory treasuryData = abi.encodeWithSelector(
-            PortfolioTreasury.initialize.selector, linkToken, uniswapV3Router, payable(automationRegistry), admin
+            PortfolioTreasury.initialize.selector, linkToken, uniswapV3Router, payable(automationRegistrar), admin
         );
 
         // 3. Deploy Treasury as UUPS proxy
@@ -170,7 +185,7 @@ contract DeployPortfolioTreasury is Script {
 
         // 4. Validate deployment and proxy-implementation linking
         _validateTreasuryDeployment(
-            address(treasuryImplementation), address(treasury), linkToken, uniswapV3Router, admin
+            address(treasuryImplementation), address(treasury), linkToken, uniswapV3Router, automationRegistrar, admin
         );
 
         // 5. Update addressBook with deployed addresses
@@ -184,8 +199,9 @@ contract DeployPortfolioTreasury is Script {
         console.log("4. Admin:", admin);
         console.log("5. LINK Token:", linkToken);
         console.log("6. Uniswap V3 Router:", uniswapV3Router);
-        console.log("7. Proxy -> Implementation Link: VALIDATED");
-        console.log("8. AddressBook updated");
+        console.log("7. Automation Registrar:", automationRegistrar);
+        console.log("8. Proxy -> Implementation Link: VALIDATED");
+        console.log("9. AddressBook updated");
 
         vm.stopBroadcast();
 
@@ -221,6 +237,7 @@ contract DeployPortfolioTreasury is Script {
      * @param proxy Treasury proxy address
      * @param expectedLink Expected LINK token address
      * @param expectedRouter Expected Uniswap V3 router address
+     * @param expectedRegistrar Expected automation registrar address
      * @param expectedAdmin Expected admin address
      */
     function _validateTreasuryDeployment(
@@ -228,6 +245,7 @@ contract DeployPortfolioTreasury is Script {
         address proxy,
         address expectedLink,
         address expectedRouter,
+        address expectedRegistrar,
         address expectedAdmin
     ) internal view {
         console.log("\n=== Treasury Deployment Validation ===");
@@ -246,6 +264,7 @@ contract DeployPortfolioTreasury is Script {
         console.log("PASS: Proxy -> Implementation: LINKED");
         console.log("PASS: LINK Token:", expectedLink);
         console.log("PASS: Uniswap Router:", expectedRouter);
+        console.log("PASS: Automation Registrar:", expectedRegistrar);
         console.log("PASS: Admin Roles: GRANTED");
         console.log("PASS: Treasury: READY FOR USE");
     }

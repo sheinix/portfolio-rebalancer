@@ -16,6 +16,7 @@
       "priceFeedUSDT": "0x14866185B1962B63C3Ea9E03Bc1da838bab34C19",
       "priceFeedWBTC": "0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43",
       "priceFeedLINK": "0xc59E3633BAAC79493d908e63626716e204A45EdF",
+      "automationRegistrar": "0xE16Df59B087e3Bc5764b5d7fC9e8A5f3b4bdB9f8",
       "automationRegistry": "0x86EFBD0b6736Bed994962f9797049422A3A8E8Ad"
     },
     "uniswap": {

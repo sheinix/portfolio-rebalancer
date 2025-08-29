@@ -5,7 +5,7 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/libraries/ValidationLibrary.sol";
 import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
-import "@chainlink/automation/interfaces/v2_3/IAutomationRegistryMaster2_3.sol";
+import "../src/interfaces/IAutomationRegistrar.sol";
 
 /**
  * @title PriceFeedValidationTest
@@ -17,7 +17,7 @@ contract PriceFeedValidationTest is Test {
     address[] public priceFeedAddresses;
     
     /// To test correct LINK address:
-    IAutomationRegistryMaster2_3 public automationRegistry;
+    IAutomationRegistrar public automationRegistrar;
 
     // Environment state
     bool public isSepoliaNetwork = false;
@@ -92,12 +92,12 @@ contract PriceFeedValidationTest is Test {
     // =============== TEST LINK TOKEN ADDRESS ===============
     function test_checkLinkTokenAddress() public {
         if (isSepoliaNetwork) {
-            address automationRegistryAddress = vm.parseJsonAddress(addressBookJson, ".chainlink.automationRegistry");
+            address automationRegistrarAddress = vm.parseJsonAddress(addressBookJson, ".chainlink.automationRegistrar");
             address myLinkAddress = vm.parseJsonAddress(addressBookJson, ".coins.LINK");
 
-            /// Call get link address on automation registry:
-            automationRegistry = IAutomationRegistryMaster2_3(payable(automationRegistryAddress));
-            address registryLinkAddress = automationRegistry.getLinkAddress();
+            /// Call get link address on automation registrar:
+            automationRegistrar = IAutomationRegistrar(payable(automationRegistrarAddress));
+            address registryLinkAddress = automationRegistrar.i_LINK();
             
             assertEq(registryLinkAddress, myLinkAddress, "Registry link address does not match my link address");
             console.log("Automation Registry LINK address:", address(registryLinkAddress));

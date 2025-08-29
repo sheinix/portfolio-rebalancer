@@ -127,7 +127,9 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
             abi.encode(proxy),
             gasLimit,
             linkAmount,
-            msg.sender // admin: vault owner
+            msg.sender, // admin: vault owner
+            "PortfolioRebalancer Vault", // name
+            "" // encryptedEmail (empty for now)
         );
 
         emit VaultCreated(msg.sender, proxy, upkeepId);

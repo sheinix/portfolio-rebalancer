@@ -50,7 +50,7 @@ contract VaultCreationTest is Test {
     address public uniswapV3SwapRouter;
     address public weth;
     address public linkToken;
-    address public automationRegistry;
+    address public automationRegistrar;
 
     // Test parameters
     address public vaultOwner = address(0x1111);
@@ -105,7 +105,7 @@ contract VaultCreationTest is Test {
             uniswapV3SwapRouter = vm.parseJsonAddress(json, ".uniswap.swapRouter");
             weth = vm.parseJsonAddress(json, ".coins.WETH");
             linkToken = vm.parseJsonAddress(json, ".coins.LINK");
-            automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+            automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
 
             console.log("Loaded Uniswap V3 Factory:", uniswapV3Factory);
             console.log("Loaded Uniswap V3 Router:", uniswapV3Router);
@@ -127,7 +127,7 @@ contract VaultCreationTest is Test {
         uniswapV3SwapRouter = address(0x5555); // Mock swap router address
         weth = address(0x6666); // Mock WETH address
         linkToken = address(new MockERC20("Chainlink Token", "LINK", 18, 1_000_000 ether));
-        automationRegistry = address(new MockAutomationRegistry());
+                    automationRegistrar = address(new MockAutomationRegistry());
 
         // Setup mock pool liquidity
         MockUniswapV3Pool mockPool = new MockUniswapV3Pool();
@@ -289,7 +289,7 @@ contract VaultCreationTest is Test {
 
         // 4. Deploy Treasury proxy
         bytes memory treasuryInitData = abi.encodeWithSelector(
-            PortfolioTreasury.initialize.selector, linkToken, uniswapV3Router, automationRegistry, treasuryAdmin
+            PortfolioTreasury.initialize.selector, linkToken, uniswapV3Router, automationRegistrar, treasuryAdmin
         );
 
         TransparentUpgradeableProxy treasuryProxy =
@@ -565,7 +565,9 @@ contract VaultCreationTest is Test {
             vault.deposit(tokenAddresses[0], depositAmount, false);
 
             // Verify deposit was successful
-            assertEq(vault.userBalances(vaultOwner, tokenAddresses[0]), depositAmount, "Deposit should be recorded");
+            uint256[] memory balances = vault.getContractBalances();
+            uint256 tokenIndex = vault.tokenIndex(tokenAddresses[0]);
+            assertEq(balances[tokenIndex], depositAmount, "Deposit should be recorded");
             assertEq(tokens[0].balanceOf(vaultProxy), depositAmount, "Vault should hold tokens");
             console.log("Verified deposit functionality with mock tokens");
         } else {
