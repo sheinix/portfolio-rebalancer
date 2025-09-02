@@ -26,11 +26,11 @@
     "swapRouter": "0x3bFA4769FB09eefC5a80d6E87c3B9C650f7Ae48E"
   },
   "portfolioRebalancer": {
-    "implementation": "0x83907Ca2d2C4fc4550eDB8c31d2303149E76d4C1",
-    "factoryImplementation": "0x3c9f646D2f3Ce08D9A74eD45B055c6910839B8c6",
-    "factory": "0x5A99b4608B2e8AA74b40ffcCd0Bb2Fdecc198b0d",
-    "treasury": "0xa088537021b15A8eEB877fD976a865090E042E31",
-    "treasuryImplementation": "0x583B4315fE809E773EE9073FE8F8AECC81ad4205",
-    "proxyAdmin": "0x2cC1044269a170aD2d3E9C497D11D4471124a3B2"
+    "implementation": "0x1F8e0b7AD4Ca16514cAEBBc1F71bF4d0A0E9CA2c",
+    "factoryImplementation": "0xB162D7a902b53Ae521a2B6ba913034b3A37fbbDe",
+    "factory": "0x5dB1e84856149B32F63d4C685050AdDB4F2D00C9",
+    "treasury": "0xe4D6C93c9CBbB3e3Aad8f6414e0F4375140F58B6",
+    "treasuryImplementation": "0xE3f4837b9C90125C5cA0855936E58eFfB2d719fc",
+    "proxyAdmin": "0x95FbF95B66D435d89Cd395c51f1feE99D0FAaeDC"
   }
 }

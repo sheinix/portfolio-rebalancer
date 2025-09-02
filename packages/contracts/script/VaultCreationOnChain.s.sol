@@ -16,18 +16,18 @@ import "@chainlink/shared/interfaces/AggregatorV3Interface.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
- * @title VaultCreationTest
+ * @title VaultCreationOnChainTest
  * @notice Comprehensive tests for vault creation using PortfolioRebalancerFactory
- * @dev Tests work on both local (Anvil) and Sepolia testnet environments
+ * @dev This is a script meant to be used as a way to test vault creations onchain.
  *
  * @dev For Sepolia testing:
  * 1. Set PRIVATE_KEY environment variable with a private key that has LINK tokens
- * 2. Run with: forge test --fork-url $SEPOLIA_RPC_URL --match-path test/VaultCreation.t.sol
+ * 2. Run with: forge script script/VaultCreationOnChain.s.sol:VaultCreationOnChainTest --rpc-url $SEPOLIA_RPC_URL --broadcast
  *
  * @dev For local testing:
- * 1. Run with: forge test --match-path test/VaultCreation.t.sol
+ * 1. Run with: forge script script/VaultCreationOnChain.s.sol:VaultCreationOnChainTest --rpc-url $SEPOLIA_RPC_URL --broadcast
  */
-contract VaultCreationTest is Test {
+contract VaultCreationOnChainTest is Script {
     // Core contracts
     PortfolioRebalancer public implementation;
     PortfolioRebalancerFactory public factory;
@@ -53,13 +53,14 @@ contract VaultCreationTest is Test {
     address public automationRegistrar;
 
     // Test parameters
+    address public deployer;
     address public vaultOwner = address(0x1111);
     address public factoryAdmin = address(0x2222);
     address public treasuryAdmin = address(0x3333);
     uint256 public constant REBALANCE_THRESHOLD = 10_000; // 1%
     uint256 public constant FACTORY_FEE_BPS = 10; // 0.1%
     uint32 public constant GAS_LIMIT = 450_000;
-    uint96 public constant LINK_AMOUNT = 1 ether;
+    uint96 public constant LINK_AMOUNT = 3 ether;
 
     function setUp() public {
         console.log("Setting up VaultCreation test environment...");
@@ -88,7 +89,20 @@ contract VaultCreationTest is Test {
         console.log("Setup complete!");
     }
 
+    function _loadDeployer() internal {
+        try vm.envString("PRIVATE_KEY") returns (string memory privateKeyStr) {
+            uint256 PRIVATE_KEY = vm.parseUint(privateKeyStr);
+            deployer = vm.addr(PRIVATE_KEY);
+
+            console.log("Deployer from ENV:", deployer);
+        } catch {
+            console.log("PRIVATE_KEY environment variable not set - skipping deployment");
+            console.log("Note: For Sepolia testing, set PRIVATE_KEY env var to deploy");
+        }
+    }
+
     function _loadEnvironmentAddresses() internal {
+        _loadDeployer();
         // Try to load from address book (for Sepolia/mainnet)
         // If not found, we'll deploy locally
         string memory filename = string.concat("addressBook/", vm.toString(block.chainid), ".json");
@@ -354,11 +368,7 @@ contract VaultCreationTest is Test {
     }
 
     function _fundTreasuryWithRealLINK() external {
-        // Get private key from environment for Sepolia testing
-        try vm.envString("PRIVATE_KEY") returns (string memory privateKeyStr) {
-            uint256 deployerPrivateKey = vm.parseUint(privateKeyStr);
-            address deployer = vm.addr(deployerPrivateKey);
-
+       
             console.log("Using deployer address for LINK funding:", deployer);
 
             try IERC20(linkToken).balanceOf(deployer) returns (uint256 deployerBalance) {
@@ -369,7 +379,7 @@ contract VaultCreationTest is Test {
                 uint256 maxVaults = 3;
                 uint256 requiredLINK = LINK_AMOUNT * maxVaults; // 15 LINK should be enough for testing
                 uint256 treasuryBalance = IERC20(linkToken).balanceOf(address(treasury));
-                if ( treasuryBalance >= requiredLINK) {
+                if (treasuryBalance >= requiredLINK) {
                     console.log("Treasury already has enough LINK. Setup complete!");
                     return;
                 }
@@ -396,10 +406,10 @@ contract VaultCreationTest is Test {
             } catch {
                 console.log("Unknown error when checking LINK balance");
             }
-        } catch {
-            console.log("PRIVATE_KEY environment variable not set - skipping treasury LINK funding");
-            console.log("Note: For Sepolia testing, set PRIVATE_KEY env var to fund treasury with real LINK");
-        }
+    }
+
+    function run() public {
+         setUp();
     }
 
     // =============== VAULT CREATION TESTS ===============
@@ -408,6 +418,8 @@ contract VaultCreationTest is Test {
         console.log("Testing successful vault creation...");
 
         // vm.startPrank(vaultOwner);
+
+        vm.startBroadcast(deployer);
 
         // Create vault through factory
         address vaultProxy = factory.createVault(
@@ -422,7 +434,9 @@ contract VaultCreationTest is Test {
             LINK_AMOUNT
         );
 
-        vm.stopPrank();
+        vm.stopBroadcast();
+
+        // vm.stopPrank();
 
         // Verify vault was created
         assertTrue(vaultProxy != address(0), "Vault proxy should not be zero address");
