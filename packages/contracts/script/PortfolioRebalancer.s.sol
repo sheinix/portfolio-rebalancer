@@ -5,6 +5,7 @@ import {Script, console} from "forge-std/Script.sol";
 import {DeployPortfolioTreasury} from "./PortfolioTreasury.s.sol";
 import {DeployPortfolioRebalancerFactory} from "./PortfolioRebalancerFactory.s.sol";
 import {PortfolioTreasury} from "../src/PortfolioTreasury.sol";
+import {PortfolioRebalancer} from "../src/PortfolioRebalancer.sol";
 
 /**
  * @title DeployPortfolioRebalancer
@@ -93,16 +94,16 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Deployer:", msg.sender);
         console.log("Treasury Admin:", treasuryAdmin);
 
-        // Read automation registry from addressBook
+        // Read automation registrar from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress =
-            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistrar, treasuryAdmin);
         console.log("!! Treasury deployment completed");
 
         // 2. Deploy Factory system (reads treasury address from addressBook)
@@ -139,16 +140,16 @@ contract DeployPortfolioRebalancer is Script {
         console.log("Factory Admin:", factoryAdmin);
         console.log("Fee BPS:", feeBps);
 
-        // Read automation registry from addressBook
+        // Read automation registrar from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         string memory json = vm.readFile(filename);
-        address automationRegistry = vm.parseJsonAddress(json, ".chainlink.automationRegistry");
+        address automationRegistrar = vm.parseJsonAddress(json, ".chainlink.automationRegistrar");
 
         // 1. Deploy Treasury with custom parameters
         console.log("\n=== Step 1: Deploying Treasury System (Custom Parameters) ===");
         treasuryDeployer = new DeployPortfolioTreasury();
         treasuryAddress =
-            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistry, treasuryAdmin);
+            treasuryDeployer.deployWithParams(linkToken, uniswapV4Router, automationRegistrar, treasuryAdmin);
         console.log("!! Treasury deployment completed");
 
         // 2. Deploy Factory system with custom parameters
@@ -183,6 +184,80 @@ contract DeployPortfolioRebalancer is Script {
 
         // 3. Final summary
         _logFinalSummary(chainId);
+    }
+
+    /**
+     * @notice Upgrade existing portfolio rebalancer implementation
+     * @return newImplementationAddress The address of the new implementation
+     */
+    function upgradeExistingProxy() public returns (address newImplementationAddress) {
+        uint256 chainId = block.chainid;
+
+        // Read existing implementation address from addressBook
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+        console.log("Reading existing portfolio rebalancer implementation from:", filename);
+        string memory json = vm.readFile(filename);
+
+        address existingImplementation = vm.parseJsonAddress(json, ".portfolioRebalancer.implementation");
+        
+        console.log("Existing PortfolioRebalancer Implementation:", existingImplementation);
+
+        // Deploy new implementation
+        PortfolioRebalancer newImplementation = new PortfolioRebalancer();
+        console.log("New PortfolioRebalancer implementation deployed at:", address(newImplementation));
+
+        // Update addressBook with new implementation
+        _updateAddressBook(chainId, address(newImplementation));
+
+        console.log("\n=== PortfolioRebalancer Implementation Upgrade Summary ===");
+        console.log("1. Chain ID:", chainId);
+        console.log("2. Old Implementation:", existingImplementation);
+        console.log("3. New Implementation:", address(newImplementation));
+        console.log("4. Upgrade: COMPLETED");
+        console.log("5. AddressBook updated");
+        console.log("");
+        console.log("Note: This only updates the implementation. Existing vaults will continue using the old implementation.");
+        console.log("To upgrade existing vaults, use the factory's upgradeVault function for each vault.");
+
+        return address(newImplementation);
+    }
+
+    /**
+     * @dev Updates the addressBook file with new portfolio rebalancer implementation address
+     * @param chainId Chain ID for the addressBook file
+     * @param implementation New implementation address
+     */
+    function _updateAddressBook(uint256 chainId, address implementation) internal {
+        string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
+
+        // Update implementation address
+        vm.writeJson(vm.toString(implementation), filename, ".portfolioRebalancer.implementation");
+
+        // Add upgrade metadata
+        vm.writeJson(vm.toString(block.number), filename, ".portfolioRebalancer.implementationUpgradeBlock");
+        vm.writeJson(vm.toString(block.timestamp), filename, ".portfolioRebalancer.implementationUpgradeTimestamp");
+
+        console.log("Updated addressBook file:", filename);
+        console.log("New Implementation:", implementation);
+        console.log("Upgrade Block:", block.number);
+        console.log("Upgrade Timestamp:", block.timestamp);
+    }
+
+    /**
+     * @dev Configure factory role in treasury to enable automation registration
+     * @param treasuryAddr Treasury contract address
+     * @param factoryAddr Factory contract address
+     */
+    function _configureFactoryRole(address treasuryAddr, address factoryAddr) internal {
+        vm.startBroadcast();
+
+        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddr);
+        treasury.setFactory(factoryAddr);
+
+        vm.stopBroadcast();
+
+        console.log("Factory role granted to:", factoryAddr);
+        console.log("Treasury can now register upkeeps for vaults created by factory");
     }
 
     /**
@@ -262,22 +337,5 @@ contract DeployPortfolioRebalancer is Script {
         console.log("  3. Set up monitoring and governance");
         console.log("");
         console.log(">>> System is ready for production use! <<<");
-    }
-
-    /**
-     * @dev Configure factory role in treasury to enable automation registration
-     * @param treasuryAddr Treasury contract address
-     * @param factoryAddr Factory contract address
-     */
-    function _configureFactoryRole(address treasuryAddr, address factoryAddr) internal {
-        vm.startBroadcast();
-
-        PortfolioTreasury treasury = PortfolioTreasury(treasuryAddr);
-        treasury.setFactory(factoryAddr);
-
-        vm.stopBroadcast();
-
-        console.log("Factory role granted to:", factoryAddr);
-        console.log("Treasury can now register upkeeps for vaults created by factory");
     }
 }

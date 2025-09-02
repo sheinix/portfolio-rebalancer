@@ -24,6 +24,14 @@
 
 set -e  # Exit on any error
 
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    echo "Loading environment variables from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+else
+    echo "Warning: .env file not found. Make sure environment variables are set manually."
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -115,7 +123,7 @@ echo -e "${BLUE}Target Network: $DISPLAY_NAME (Chain ID: $CHAIN_ID)${NC}"
 echo ""
 
 # Check if .env file exists (in contracts root directory)
-if [ ! -f ../.env ]; then
+if [ ! -f .env ]; then
     echo -e "${RED}ERROR: .env file not found${NC}"
     echo "Create .env file in the contracts root directory with required variables for $DISPLAY_NAME:"
     echo "PRIVATE_KEY=your_private_key_here"
@@ -125,7 +133,7 @@ if [ ! -f ../.env ]; then
 fi
 
 # Source environment variables
-. ../.env
+. .env
 
 # Check required environment variables
 if [ -z "$PRIVATE_KEY" ]; then
@@ -173,7 +181,7 @@ echo ""
 
 # Deploy with verification
 echo -e "${YELLOW}Deploying complete system with block explorer verification...${NC}"
-forge script PortfolioRebalancer.s.sol \
+forge script script/PortfolioRebalancer.s.sol:DeployPortfolioRebalancer \
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
     --broadcast \

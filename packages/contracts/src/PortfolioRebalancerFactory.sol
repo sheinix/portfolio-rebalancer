@@ -9,6 +9,7 @@ import "@openzeppelin-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin-upgradeable/access/AccessControlUpgradeable.sol";
 import "./interfaces/IPortfolioRebalancer.sol";
 import "./PortfolioTreasury.sol";
+import "./libraries/ValidationLibrary.sol";
 
 /**
  * @title PortfolioRebalancerFactory
@@ -16,6 +17,8 @@ import "./PortfolioTreasury.sol";
  * @dev UUPS upgradeable factory that deploys transparent proxies for gas efficiency.
  */
 contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessControlUpgradeable {
+    using ValidationLibrary for address;
+
     address public implementation;
     address public treasury;
     uint256 public feeBps;
@@ -37,6 +40,11 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         external
         initializer
     {
+        ValidationLibrary.validateNonZeroAddress(_proxyAdmin);
+        ValidationLibrary.validateNonZeroAddress(_implementation);
+        ValidationLibrary.validateNonZeroAddress(_treasury);
+        ValidationLibrary.validateNonZeroAddress(admin);
+
         __UUPSUpgradeable_init();
         __AccessControl_init();
 
@@ -81,6 +89,8 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
      * @param allocations Target allocations (scaled by ALLOCATION_SCALE, sum == ALLOCATION_SCALE).
      * @param rebalanceThreshold Allowed deviation before auto-rebalance (e.g. 10,000 = 1%).
      * @param uniswapV3Factory Uniswap V3 factory address.
+     * @param uniswapV3SwapRouter Uniswap V3 swap router address.
+     * @param weth WETH token address.
      * @param gasLimit Gas limit for automation performUpkeep calls.
      * @param linkAmount Amount of LINK to fund the automation upkeep.
      * @return proxy The address of the new proxy vault.
@@ -91,6 +101,8 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         uint256[] calldata allocations,
         uint256 rebalanceThreshold,
         address uniswapV3Factory,
+        address uniswapV3SwapRouter,
+        address weth,
         uint32 gasLimit,
         uint96 linkAmount
     ) external returns (address proxy) {
@@ -101,6 +113,8 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
             allocations,
             rebalanceThreshold,
             uniswapV3Factory,
+            uniswapV3SwapRouter,
+            weth,
             feeBps,
             treasury,
             msg.sender
@@ -110,9 +124,12 @@ contract PortfolioRebalancerFactory is Initializable, UUPSUpgradeable, AccessCon
         // Register vault with Chainlink Automation via treasury
         uint256 upkeepId = PortfolioTreasury(treasury).registerAndFundUpkeep(
             proxy,
-            abi.encodePacked(proxy), // Simple checkData encoding vault address
+            abi.encode(proxy),
             gasLimit,
-            linkAmount
+            linkAmount,
+            msg.sender, // admin: vault owner
+            "PortfolioRebalancer Vault", // name
+            "" // encryptedEmail (empty for now)
         );
 
         emit VaultCreated(msg.sender, proxy, upkeepId);

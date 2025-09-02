@@ -50,14 +50,18 @@ remappings = [
     "solmate/=lib/solmate/src/",
     "forge-std/=lib/forge-std/src/",
     "@chainlink/=lib/chainlink-brownie-contracts/contracts/src/v0.8/",
+    "@uniswap/v3-core/=lib/v3-core/",
+    "@uniswap/v3-periphery/=lib/v3-periphery/",
 ]
 
+private_key = "${PRIVATE_KEY}" # never commit!  set in CI env
 #################################
 #  Sepolia fork testing config  #
 #################################
-[profile.sepolia]
+# [profile.sepolia]
 fork_url = "${SEPOLIA_RPC_URL}"
 # fork_block_number = 10000000
+# private_key = "${PRIVATE_KEY}" # never commit!  set in CI env
 
 #####################
 #  RPC END-POINTS   #
@@ -108,4 +112,3 @@ bsc-testnet = "${BSC_TEST_RPC_URL}"
 # override with CLI flags on CI or locally.
 # eth_rpc_url = "${SEPOLIA_RPC_URL}"
 # block_gas_limit = 30000000
-# private_key = "${PRIVATE_KEY}" # never commit!  set in CI env

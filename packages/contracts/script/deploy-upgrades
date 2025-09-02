@@ -1,0 +1,253 @@
+#!/bin/bash
+
+# Portfolio Rebalancer Contract Upgrade Script
+# 
+# This script upgrades existing proxy contracts with new implementations
+# 
+# Prerequisites:
+# 1. Set up .env file with API keys for your target networks:
+#    # Ethereum networks
+#    ETHERSCAN_API_KEY=your_etherscan_key_here
+#    MAINNET_RPC_URL=your_mainnet_rpc_url
+#    SEPOLIA_RPC_URL=your_sepolia_rpc_url
+#    
+#    # Base networks  
+#    BASESCAN_API_KEY=your_basescan_key_here
+#    BASE_RPC_URL=your_base_rpc_url
+#    BASE_SEPOLIA_RPC_URL=your_base_sepolia_rpc_url
+#    
+#    # Deployer key
+#    PRIVATE_KEY=your_private_key_here
+#
+# 2. Fund your deployer account with native tokens for the target network
+#
+# Usage: sh deploy-upgrades --network {network_name} --contract {contract_name}
+# Supported networks: sepolia, mainnet, base, baseSepolia
+# Supported contracts: treasury, factory, portfolio-rebalancer
+#
+# Example: sh deploy-upgrades --network sepolia --contract treasury
+
+set -e  # Exit on any error
+
+# Load environment variables from .env file
+if [ -f ".env" ]; then
+    echo "Loading environment variables from .env file..."
+    export $(cat .env | grep -v '^#' | xargs)
+else
+    echo "Warning: .env file not found. Make sure environment variables are set manually."
+fi
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Function to get network configuration
+get_network_config() {
+    local network=$1
+    case $network in
+        sepolia)
+            echo "SEPOLIA_RPC_URL 11155111 ETHERSCAN_API_KEY Sepolia"
+            ;;
+        mainnet)
+            echo "MAINNET_RPC_URL 1 ETHERSCAN_API_KEY Ethereum_Mainnet"
+            ;;
+        base)
+            echo "BASE_RPC_URL 8453 BASESCAN_API_KEY Base_Mainnet"
+            ;;
+        baseSepolia)
+            echo "BASE_SEPOLIA_RPC_URL 84532 BASESCAN_API_KEY Base_Sepolia"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Function to show usage
+show_usage() {
+    echo -e "${BLUE}Usage: sh deploy-upgrades --network {network_name} --contract {contract_name}${NC}"
+    echo ""
+    echo "Supported networks:"
+    echo "  sepolia      - Ethereum Sepolia testnet"
+    echo "  mainnet      - Ethereum mainnet"
+    echo "  base         - Base mainnet"
+    echo "  baseSepolia  - Base Sepolia testnet"
+    echo ""
+    echo "Supported contracts:"
+    echo "  treasury           - PortfolioTreasury contract"
+    echo "  factory            - PortfolioRebalancerFactory contract"
+    echo "  portfolio-rebalancer - PortfolioRebalancer implementation (for vault upgrades)"
+    echo ""
+    echo "Example: sh deploy-upgrades --network sepolia --contract treasury"
+}
+
+# Function to upgrade treasury
+upgrade_treasury() {
+    local network=$1
+    local rpc_url=$2
+    local chain_id=$3
+    local api_key=$4
+    
+    echo -e "${BLUE}Upgrading PortfolioTreasury on $network...${NC}"
+    
+    # Deploy new treasury implementation and upgrade proxy
+    forge script script/PortfolioTreasury.s.sol:DeployPortfolioTreasury \
+        --sig "upgradeExistingProxy()" \
+        --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
+        --broadcast \
+        --verify \
+        --etherscan-api-key "$api_key"
+    
+    echo -e "${GREEN}PortfolioTreasury upgrade completed on $network!${NC}"
+}
+
+# Function to upgrade factory
+upgrade_factory() {
+    local network=$1
+    local rpc_url=$2
+    local chain_id=$3
+    local api_key=$4
+    
+    echo -e "${BLUE}Upgrading PortfolioRebalancerFactory on $network...${NC}"
+    
+    # Deploy new factory implementation and upgrade proxy
+    forge script script/PortfolioRebalancerFactory.s.sol:DeployPortfolioRebalancerFactory \
+        --sig "upgradeExistingProxy()" \
+        --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
+        --broadcast \
+        --verify \
+        --etherscan-api-key "$api_key"
+    
+    echo -e "${GREEN}PortfolioRebalancerFactory upgrade completed on $network!${NC}"
+}
+
+# Function to upgrade portfolio rebalancer implementation
+upgrade_portfolio_rebalancer() {
+    local network=$1
+    local rpc_url=$2
+    local chain_id=$3
+    local api_key=$4
+    
+    echo -e "${BLUE}Upgrading PortfolioRebalancer implementation on $network...${NC}"
+    
+    # Deploy new portfolio rebalancer implementation and upgrade proxy
+    forge script script/PortfolioRebalancer.s.sol:DeployPortfolioRebalancer \
+        --sig "upgradeExistingProxy()" \
+        --rpc-url "$rpc_url" \
+        --private-key "$PRIVATE_KEY" \
+        --broadcast \
+        --verify \
+        --etherscan-api-key "$api_key"
+    
+    echo -e "${GREEN}PortfolioRebalancer implementation upgrade completed on $network!${NC}"
+}
+
+# Parse command line arguments
+NETWORK=""
+CONTRACT=""
+while [ $# -gt 0 ]; do
+    case $1 in
+        --network)
+            NETWORK="$2"
+            shift 2
+            ;;
+        --contract)
+            CONTRACT="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}ERROR: Unknown argument: $1${NC}"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+# Validate parameters
+if [ -z "$NETWORK" ]; then
+    echo -e "${RED}ERROR: Network not specified${NC}"
+    echo ""
+    show_usage
+    exit 1
+fi
+
+if [ -z "$CONTRACT" ]; then
+    echo -e "${RED}ERROR: Contract not specified${NC}"
+    echo ""
+    show_usage
+    exit 1
+fi
+
+# Get network configuration
+NETWORK_CONFIG=$(get_network_config "$NETWORK")
+if [ -z "$NETWORK_CONFIG" ]; then
+    echo -e "${RED}ERROR: Unsupported network: $NETWORK${NC}"
+    show_usage
+    exit 1
+fi
+
+# Parse network config
+read -r RPC_URL_VAR CHAIN_ID API_KEY_VAR NETWORK_NAME <<< "$NETWORK_CONFIG"
+
+# Get actual values from environment
+RPC_URL=$(eval echo "\$$RPC_URL_VAR")
+API_KEY=$(eval echo "\$$API_KEY_VAR")
+
+# Validate environment variables
+if [ -z "$RPC_URL" ]; then
+    echo -e "${RED}ERROR: $RPC_URL_VAR environment variable not set${NC}"
+    exit 1
+fi
+
+if [ -z "$API_KEY" ]; then
+    echo -e "${RED}ERROR: $API_KEY_VAR environment variable not set${NC}"
+    exit 1
+fi
+
+# Check if PRIVATE_KEY is set
+if [ -z "$PRIVATE_KEY" ]; then
+    echo -e "${RED}ERROR: PRIVATE_KEY environment variable not set${NC}"
+    exit 1
+fi
+
+echo -e "${BLUE}=== Portfolio Rebalancer Contract Upgrade ===${NC}"
+echo -e "${BLUE}Network: $NETWORK_NAME ($NETWORK)${NC}"
+echo -e "${BLUE}Chain ID: $CHAIN_ID${NC}"
+echo -e "${BLUE}Contract: $CONTRACT${NC}"
+echo -e "${BLUE}RPC URL: $RPC_URL${NC}"
+echo ""
+
+# Change to contracts directory (only if not already there)
+if [[ ! "$PWD" == *"packages/contracts"* ]]; then
+    cd packages/contracts
+fi
+
+# Execute upgrade based on contract type
+case $CONTRACT in
+    treasury)
+        upgrade_treasury "$NETWORK" "$RPC_URL" "$CHAIN_ID" "$API_KEY"
+        ;;
+    factory)
+        upgrade_factory "$NETWORK" "$RPC_URL" "$CHAIN_ID" "$API_KEY"
+        ;;
+    portfolio-rebalancer)
+        upgrade_portfolio_rebalancer "$NETWORK" "$RPC_URL" "$CHAIN_ID" "$API_KEY"
+        ;;
+    *)
+        echo -e "${RED}ERROR: Unsupported contract: $CONTRACT${NC}"
+        echo ""
+        show_usage
+        exit 1
+        ;;
+esac
+
+echo -e "${GREEN}=== Upgrade completed successfully! ===${NC}"
