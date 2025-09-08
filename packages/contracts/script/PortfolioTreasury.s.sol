@@ -113,24 +113,19 @@ contract DeployPortfolioTreasury is Script {
         console.log("Existing Treasury Proxy:", existingProxy);
         console.log("Existing Treasury Implementation:", existingImplementation);
 
-        // Deploy new implementation
-        PortfolioTreasury newImplementation = new PortfolioTreasury();
+        // Deploy new implementation with salt to force new address
+        bytes32 salt = keccak256(abi.encodePacked("treasury-v2", block.timestamp));
+        PortfolioTreasury newImplementation = new PortfolioTreasury{salt: salt}();
         console.log("New PortfolioTreasury implementation deployed at:", address(newImplementation));
 
         // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)
         vm.startBroadcast();
         console.log("Broadcasting with account:", tx.origin);
         
-        // For UUPS upgradeable contracts, we need to call upgradeToAndCall through the proxy's fallback
-        // The proxy will delegate the call to the implementation's upgradeToAndCall function
-        (bool success, ) = existingProxy.call(
-            abi.encodeWithSignature(
-                "upgradeToAndCall(address,bytes)",
-                address(newImplementation),
-                "" // No initialization data needed for upgrade
-            )
-        );
-        require(success, "Upgrade failed");
+        // For UUPS upgradeable contracts, we need to call upgradeToAndCall directly on the proxy
+        // as the admin, not through the implementation
+        PortfolioTreasury treasuryContract = PortfolioTreasury(existingProxy);
+        treasuryContract.upgradeToAndCall(address(newImplementation), "");
         vm.stopBroadcast();
 
         // Update addressBook with new implementation

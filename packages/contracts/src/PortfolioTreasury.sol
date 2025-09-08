@@ -167,17 +167,17 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
         
         // Create RegistrationParams struct
         IAutomationRegistrar.RegistrationParams memory params = IAutomationRegistrar.RegistrationParams({
-            upkeepContract: upkeepContract,
-            amount: linkAmount,
-            adminAddress: admin,
-            gasLimit: gasLimit,
-            triggerType: 0, // 0 = conditional
-            billingToken: IERC20(link),
             name: name,
             encryptedEmail: encryptedEmail,
+            upkeepContract: upkeepContract,
+            gasLimit: gasLimit,
+            adminAddress: admin,
+            triggerType: 0, // 0 = conditional
+            billingToken: IERC20(link),
             checkData: checkData,
             triggerConfig: "", // empty for conditional
-            offchainConfig: "" // empty
+            offchainConfig: "", // empty
+            amount: linkAmount
         });
 
         // Register the upkeep with Chainlink Automation Registrar
@@ -203,4 +203,13 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
      * @dev Authorizes contract upgrades. Only ADMIN can upgrade.
      */
     function _authorizeUpgrade(address) internal override onlyRole(ADMIN_ROLE) {}
+
+    /**
+     * @dev Returns the storage slot that the proxiable contract assumes is being used to store the implementation
+     * address. This is needed because we need to know this slot so the UpgradeableBeacon can set the storage slot
+     * associated with this implementation.
+     */
+    function proxiableUUID() external pure override returns (bytes32) {
+        return 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+    }
 }
