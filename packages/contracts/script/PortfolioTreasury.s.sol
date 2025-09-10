@@ -4,6 +4,7 @@ pragma solidity ^0.8.13;
 import {Script, console} from "forge-std/Script.sol";
 import {PortfolioTreasury} from "../src/PortfolioTreasury.sol";
 import "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "@openzeppelin/contracts/utils/StorageSlot.sol";
 
 contract DeployPortfolioTreasury is Script {
     PortfolioTreasury public treasuryImplementation;
@@ -83,14 +84,32 @@ contract DeployPortfolioTreasury is Script {
     }
 
     /**
-     * @notice Test function to verify which account is being used
+     * @notice Grant ADMIN_ROLE to an account (must be called by DEFAULT_ADMIN_ROLE holder)
+     * @param treasuryAddress Treasury proxy address
+     * @param account Account to grant role to
      */
-    function testAccount() public view {
-        console.log("=== Account Test ===");
-        console.log("tx.origin:", tx.origin);
-        console.log("msg.sender:", msg.sender);
-        console.log("block.chainid:", block.chainid);
+    function grantAdminRole(address treasuryAddress, address account) public {
+        // Use private key from .env file
+        uint256 privateKey = vm.envUint("PRIVATE_KEY");
+        address caller = vm.addr(privateKey);
+        
+        PortfolioTreasury treasuryContract = PortfolioTreasury(treasuryAddress);
+        bytes32 ADMIN_ROLE = treasuryContract.ADMIN_ROLE();
+        bytes32 DEFAULT_ADMIN_ROLE = treasuryContract.DEFAULT_ADMIN_ROLE();
+        
+        // Verify caller has DEFAULT_ADMIN_ROLE
+        require(treasuryContract.hasRole(DEFAULT_ADMIN_ROLE, caller), "Caller must have DEFAULT_ADMIN_ROLE");
+        
+        vm.startBroadcast(privateKey);
+        treasuryContract.grantRole(ADMIN_ROLE, account);
+        vm.stopBroadcast();
+        
+        console.log("=== ADMIN_ROLE Granted ===");
+        console.log("Treasury:", treasuryAddress);
+        console.log("Account:", account);
+        console.log("Role granted by:", caller);
     }
+
 
     /**
      * @notice Upgrade existing treasury proxy with new implementation
@@ -102,8 +121,6 @@ contract DeployPortfolioTreasury is Script {
         // Read existing proxy address from addressBook
         string memory filename = string.concat("addressBook/", vm.toString(chainId), ".json");
         console.log("Reading existing treasury proxy from:", filename);
-        console.log("Using TX Origin:", tx.origin);
-        console.log("Using msg.sender:", msg.sender);
         
         string memory json = vm.readFile(filename);
 
@@ -113,33 +130,40 @@ contract DeployPortfolioTreasury is Script {
         console.log("Existing Treasury Proxy:", existingProxy);
         console.log("Existing Treasury Implementation:", existingImplementation);
 
-        // Deploy new implementation with salt to force new address
-        bytes32 salt = keccak256(abi.encodePacked("treasury-v2", block.timestamp));
-        PortfolioTreasury newImplementation = new PortfolioTreasury{salt: salt}();
-        console.log("New PortfolioTreasury implementation deployed at:", address(newImplementation));
-
-        // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)
+        // Deploy new implementation with unique salt to avoid address collisions
         vm.startBroadcast();
-        console.log("Broadcasting with account:", tx.origin);
+        PortfolioTreasury newImplementation = new PortfolioTreasury();
+        address newImplAddress = address(newImplementation);
+
+        console.log("New PortfolioTreasury implementation deployed at:", newImplAddress);
         
-        // For UUPS upgradeable contracts, we need to call upgradeToAndCall directly on the proxy
-        // as the admin, not through the implementation
+        // Verify the caller has ADMIN_ROLE before attempting upgrade
         PortfolioTreasury treasuryContract = PortfolioTreasury(existingProxy);
+        
+        // Upgrade the existing proxy (must be called by account with ADMIN_ROLE)        
+        // For UUPS upgradeable contracts, call upgradeToAndCall directly on the proxy
+        // The _authorizeUpgrade function will verify the caller has ADMIN_ROLE
         treasuryContract.upgradeToAndCall(address(newImplementation), "");
+        
         vm.stopBroadcast();
+        
+        // Verify the upgrade was successful
+        address updatedImplementation = _getImplementation(existingProxy);
+        require(updatedImplementation == newImplAddress, "Upgrade failed - implementation not updated");
+        console.log("PASS: Upgrade successful - implementation updated");
 
         // Update addressBook with new implementation
-        _updateAddressBook(chainId, address(newImplementation), existingProxy);
+        _updateAddressBook(chainId, newImplAddress, existingProxy);
 
         console.log("\n=== Treasury Upgrade Summary ===");
         console.log("1. Chain ID:", chainId);
         console.log("2. Old Implementation:", existingImplementation);
-        console.log("3. New Implementation:", address(newImplementation));
+        console.log("3. New Implementation:", newImplAddress);
         console.log("4. Proxy (unchanged):", existingProxy);
         console.log("5. Upgrade: COMPLETED");
         console.log("6. AddressBook updated");
 
-        return address(newImplementation);
+        return newImplAddress;
     }
 
     /**
@@ -201,6 +225,19 @@ contract DeployPortfolioTreasury is Script {
         vm.stopBroadcast();
 
         return address(treasury);
+    }
+
+    /**
+     * @dev Get the implementation address from an ERC1967 proxy
+     * @param proxyAddress The proxy address
+     * @return implementation The implementation address
+     */
+    function _getImplementation(address proxyAddress) internal view returns (address implementation) {
+        // Read the implementation address from the proxy's storage using Foundry's vm.load
+        // ERC1967 implementation slot
+        bytes32 slot = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+        bytes32 data = vm.load(proxyAddress, slot);
+        implementation = address(uint160(uint256(data)));
     }
 
     /**

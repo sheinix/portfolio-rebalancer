@@ -30,7 +30,7 @@
     "factoryImplementation": "0x87ec5642A518804bc53d7F99C58a606e497bAC3B",
     "factory": "0xe2b9CDB9008f501C91813ffeb486A6b57F80ff3F",
     "treasury": "0x2eD67a9f88A4a345596Ec622f0fCc3fc14131633",
-    "treasuryImplementation": "0x09a316A9fa945caa0020f94fE2c2B59492B73620",
+    "treasuryImplementation": "0x1925BB1B6285F949575FDBeDB02246F06fAc3fAe",
     "proxyAdmin": "0xB76cf4FDCa5c19cACbEaf73c9a47A4fD230A6e6d"
   }
 }

@@ -57,7 +57,7 @@ contract VaultCreationTest is Test {
     address public factoryAdmin = address(0x2222);
     address public treasuryAdmin = address(0x3333);
     uint256 public constant REBALANCE_THRESHOLD = 10_000; // 1%
-    uint256 public constant FACTORY_FEE_BPS = 10; // 0.1%
+    uint256 public constant FACTORY_FEE_BPS = 50; // 0.5%
     uint32 public constant GAS_LIMIT = 450_000;
     uint96 public constant LINK_AMOUNT = 1 ether;
 

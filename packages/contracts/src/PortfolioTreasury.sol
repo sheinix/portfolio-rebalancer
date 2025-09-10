@@ -173,8 +173,7 @@ contract PortfolioTreasury is Initializable, UUPSUpgradeable, AccessControlUpgra
             gasLimit: gasLimit,
             adminAddress: admin,
             triggerType: 0, // 0 = conditional
-            billingToken: IERC20(link),
-            checkData: checkData,
+            checkData: "0x",
             triggerConfig: "", // empty for conditional
             offchainConfig: "", // empty
             amount: linkAmount

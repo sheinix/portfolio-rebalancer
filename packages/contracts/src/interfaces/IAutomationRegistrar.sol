@@ -16,7 +16,6 @@ interface IAutomationRegistrar {
         uint32 gasLimit;
         address adminAddress;
         uint8 triggerType;
-        IERC20 billingToken;
         bytes checkData;
         bytes triggerConfig;
         bytes offchainConfig;
