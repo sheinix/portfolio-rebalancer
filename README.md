@@ -5,6 +5,8 @@
 
 A modular, upgradeable smart contract system for creating per-user portfolio rebalancing vaults on EVM-compatible blockchains. Each user can deploy their own vault (proxy) with a custom basket of ERC-20 tokens and target allocations, and the vault will automatically or manually rebalance using Uniswap V4 and Chainlink price feeds.
 
+> **⚠️ Disclaimer:** This is a personal project for fun and is currently in progress. The code has not been audited and should not be used in production without proper security review. Use at your own risk.
+
 ---
 
 ## Features
@@ -18,7 +20,9 @@ A modular, upgradeable smart contract system for creating per-user portfolio reb
 
 ---
 
-## Architecture
+## Architecture (WIP)
+
+![Architecture Diagram WIP](docs/architecture.png)
 
 ```
 User <-> PortfolioRebalancerFactory <-> ERC1967Proxy (user's vault) <-> PortfolioRebalancer (implementation)

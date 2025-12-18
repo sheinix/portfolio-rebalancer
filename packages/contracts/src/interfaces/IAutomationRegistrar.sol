@@ -9,19 +9,18 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
  * @dev This interface only includes the functions we need to avoid version compatibility issues
  */
 interface IAutomationRegistrar {
-    struct RegistrationParams {
-        address upkeepContract;
-        uint96 amount;
-        address adminAddress;
-        uint32 gasLimit;
-        uint8 triggerType;
-        IERC20 billingToken;
+     struct RegistrationParams {
         string name;
         bytes encryptedEmail;
+        address upkeepContract;
+        uint32 gasLimit;
+        address adminAddress;
+        uint8 triggerType;
         bytes checkData;
         bytes triggerConfig;
         bytes offchainConfig;
-    }
+        uint96 amount;
+  }
 
     /**
      * @notice Register a new upkeep

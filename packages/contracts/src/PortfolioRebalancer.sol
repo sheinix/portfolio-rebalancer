@@ -61,10 +61,8 @@ contract PortfolioRebalancer is
 
     // Rebalance threshold (in ALLOCATION_SCALE units, e.g. 0.01 = 10,000)
     uint256 public rebalanceThreshold;
-
-    // Immutable fee parameters
-    uint256 public feeBps; // Immutable after initialization
-    address public treasury; // Immutable after initialization
+    uint256 public feeBps;
+    address public treasury;
     bool public automationEnabled;
 
     // Events
